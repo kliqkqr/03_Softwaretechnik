@@ -1,0 +1,28 @@
+Code Charts
+
+Req. ID : 6 Req. Type : functional Events/UCs:
+Description: Wechsel zwischen Darstellung Bild und Matrix
+Rationale: Erfassung der Position des betrachteten Bildbereiches
+Originator: Kunde
+Fit Criterion: Abfrage eines Zustandsautomaten
+Customer Satisfaction: 10 Customer Dissatisfaction: 10 Priority: 1
+Supporting Material: Conflicts:
+History: Erstellt am 22.10.2021 von Moritz Braun
+
+Req. ID : 7 Req. Type : functional Events/UCs:
+Description: Die Rastergröße soll individuell einstellbar sein
+Rationale: Auswahl zwischen Fenster und relativer Größe.Auswahl der relativen Größe dabei von existierenden Daten abhängig
+Originator: Programm
+Fit Criterion: Die relative Größe bezieht sich auf bereits vorhanden Daten. Sollten viele Eingaben des Probanden die selbe Stelle beschreiben, sollen kleinere Raster für diese Stelle verwendet werden
+Customer Satisfaction: 10 Customer Dissatisfaction: 10 Priority: 1
+Supporting Material: Conflicts:
+History: Erstellt am 22.10.2021 von Moritz Braun
+
+Req. ID : 8 Req. Type : non-functional Events/UCs:
+Description: Genauigkeit des eingestellten Zeitintervalls
+Rationale: Die Abweichung der tatsächlichen Wechselzeit von der zuvor eingestellten Wechselzeit ist kleiner als 5% 
+Originator: Kunde
+Fit Criterion: Abfrage des Zustandsautomaten in festgelegten Zeitintervallen
+Customer Satisfaction: 5 Customer Dissatisfaction: 5 Priority: 3
+Supporting Material: Conflicts:
+History: Erstellt am 22.10.2021 von Moritz Braun
