@@ -1,0 +1,9 @@
+# Section for setting the database authorization data
+# e.g.: host, username, password
+Database:
+  host: mysql.hrz.tu-chemnitz.de
+  user: Eyetracking_GR03_rw
+  pass: 1234
+
+Settings:
+  BubbleView:Test: 5
