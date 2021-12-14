@@ -1,4 +1,5 @@
 .idea
 venv
-Codebase/Rust/swtp/target/
-Codebase/Rust/swtp/Cargo.lock
+Codebase/Rust
+Vorlagen
+Meilensteine
