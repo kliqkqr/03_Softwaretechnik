@@ -3,7 +3,7 @@
 Database:
   host: mysql.hrz.tu-chemnitz.de
   user: Eyetracking_GR03_rw
-  pass: 1234
+  pass: Exp1234
 
 Settings:
   BubbleView:Test: 5

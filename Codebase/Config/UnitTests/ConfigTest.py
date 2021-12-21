@@ -1,13 +1,13 @@
 import unittest
 
 from Config.ConfigFile import ConfigFile
-from Config.Einstellung import Einstellung
-from Config.Filter import Filter
-from Config.Formengroesse import Formengroesse
-from Config.Rastergroesse import Rastergroesse
-from Config.Stringordnung import Stringordnung
-from Config.Formen import Formen
-from Config.Wechselzeitdauer import Wechselzeitdauer
+from Config.Einstellungen.Einstellung import Einstellung
+from Config.Einstellungen.Filter import Filter
+from Config.Einstellungen.Formengroesse import Formengroesse
+from Config.Einstellungen.Rastergroesse import Rastergroesse
+from Config.Einstellungen.Stringordnung import Stringordnung
+from Config.Einstellungen.Formen import Formen
+from Config.Einstellungen.Wechselzeitdauer import Wechselzeitdauer
 
 
 class ConfigTest(unittest.TestCase):
