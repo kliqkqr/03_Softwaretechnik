@@ -1,6 +1,9 @@
 from tkinter import *
 
 # initiate window
+from CodeChart.CodeChart import CodeChart
+from Config.ConfigFile import ConfigFile
+
 win = Tk()
 win.title('Project Toolbox')
 win_width=0
@@ -69,14 +72,17 @@ def codeCharts_screen():
     win_width=900
     win.geometry(f"{win_width}x{win_height}")
 
-    # pack the frame and place Button
+    # place Button and pack the frame
     codeCharts_screen_frame.pack(fill="both", expand=1)
     codeCharts_back_button = Button(codeCharts_screen_frame, text='Zurück', command=start_screen)
     codeCharts_back_button.place(relx=0.05, rely=0.925, relheight=0.05, relwidth=0.2)
 
-    # just a gapfiller
-    codeCharts_label = Label(codeCharts_screen_frame, text='*le Code Charts...', bg='grey')
-    codeCharts_label.place(relx=0.15, rely=0.45, relheight=0.1, relwidth=0.7)
+    # settings
+    cf = ConfigFile()
+    cf.loadSettings()
+    cf.saveSettings()
+    # CodeChart functionality
+    codecharts = CodeChart(win, codeCharts_screen_frame, cf)
 
 
 def datenanalyse_screen():

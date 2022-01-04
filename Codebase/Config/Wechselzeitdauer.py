@@ -2,7 +2,8 @@ from Config.Einstellung import Einstellung
 
 
 class Wechselzeitdauer(Einstellung):
-    DEFAULT_DAUER = 5
+    DEFAULT_DAUER = 2
+    NAME = "CodeCharts:Wechselzeitdauer"
 
     def __init__(self, dauer=DEFAULT_DAUER):
         if self.testValue(dauer):
@@ -11,7 +12,7 @@ class Wechselzeitdauer(Einstellung):
             self.dauer = self.DEFAULT_DAUER
 
     def getName(self):
-        return "CodeCharts:Wechselzeitdauer"
+        return self.NAME
 
     def getValue(self):
         return self.dauer

@@ -6,4 +6,4 @@ Database:
   pass: Exp1234
 
 Settings:
-  BubbleView:Test: 5
+  Test: 5

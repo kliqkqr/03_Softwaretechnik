@@ -5,13 +5,14 @@ class Rastergroesse(Einstellung):
 
     DEFAULT_WIDTH = 10
     DEFAULT_HEIGHT = 10
+    NAME = "CodeCharts:Rastergroesse"
 
     def __init__(self, width=DEFAULT_WIDTH, height=DEFAULT_HEIGHT):
         self.width = width if self.testValue(width) else self.DEFAULT_WIDTH
         self.height = height if self.testValue(height) else self.DEFAULT_HEIGHT
 
     def getName(self):
-        return "CodeCharts:Rastergroesse"
+        return self.NAME
 
     def getValue(self):
         return [self.width, self.height]
