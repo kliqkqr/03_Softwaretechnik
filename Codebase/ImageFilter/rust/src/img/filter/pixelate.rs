@@ -1,6 +1,5 @@
 use std::sync;
 use std::thread;
-use std::time;
 
 use image::{ Rgb, RgbImage, GenericImage, GenericImageView };
 

@@ -1,3 +1,4 @@
+pub mod bubble;
 pub mod filter;
 
 use std::path::{ Path };

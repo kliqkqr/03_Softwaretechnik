@@ -1,53 +1,39 @@
-import rust
+import multiprocessing
+import math
 
-from timeit import default_timer as timer
-
-from PIL import Image, ImageFilter
-
-SOURCE = r'C:\OneDrive\Code\03_Softwaretechnik\Codebase\ImageFilter\source\geo.jpg'
-TARGET = r'C:\OneDrive\Code\03_Softwaretechnik\Codebase\ImageFilter\target\geo.tiff'
-APP    = r'C:\OneDrive\Code\03_Softwaretechnik\Codebase\Rust\swtp\target\release\swtp.exe'
+from PIL import Image
 
 
-def benchmark(f):
-    start  = timer()
-    result = f()
-    time   = timer() - start
-    return result, time
+from Rust import Rust
 
 
-def blur_box_pil(source, radius, iterations):
-    target = source
-    for _ in range(iterations):
-        target = target.filter(ImageFilter.BoxBlur(radius))
+def pixelate_square(image, diameter, threads = None):
+    threads = multiprocessing.cpu_count() if threads is None else threads
 
-    return target
+    return Rust.pixelate_square(image, diameter, threads)
 
 
-def blur_box(source, radius, iterations, threads):
-    width, height = source.size
-    buffer        = source.tobytes()
+def blur_box(image, radius, iterations, threads = None):
+    threads = multiprocessing.cpu_count() if threads is None else threads
 
-    buffer = rust.blur_box(width, height, buffer, radius, iterations, threads)
-    target = Image.frombuffer('RGB', (width, height), buffer)
-
-    return target
+    return Rust.blur_box(image, radius, iterations, threads)
 
 
-def pixelate_square_pil(source, diameter):
-    width, height = source.size
+def blur_gaussian(image, radius = None, iterations = None, threads = None):
+    # https://www.mia.uni-saarland.de/Publications/gwosdek-ssvm11.pdf
 
-    target = source.resize((width // diameter, height // diameter), resample = Image.BILINEAR)
-    target = target.resize((width, height), resample = Image.NEAREST)
+    radius     = 2 if radius     is None else radius
+    iterations = 3 if iterations is None else iterations
 
-    return target
+    sigma    = radius ** 2 / iterations
+    # Box length
+    length   = math.sqrt(12 * sigma + 1)
+    # Integer part of box radius
+    i_radius = math.floor((length - 1) / 2)
+    # Fractional part of box radius
+    f_radius = (2 * i_radius + 1) * (i_radius * (i_radius + 1) - 3 * sigma)
+    f_radius /= 6 * (sigma - (i_radius + 1) ** 2)
 
+    radius = int(i_radius + f_radius)
 
-def pixelate_square(source, diameter, threads):
-    width, height = source.size
-    buffer        = source.tobytes()
-
-    buffer = rust.pixelate_square(width, height, buffer, diameter, threads)
-    target = Image.frombuffer('RGB', (width, height), buffer)
-
-    return target
+    return blur_box(image, radius, iterations, threads)

@@ -1,5 +1,4 @@
 use std;
-use std::cmp;
 use std::sync;
 use std::thread;
 use std::vec;
@@ -28,6 +27,7 @@ pub fn horizontal_box(source : &RgbImage, radius : u32) -> RgbImage {
 
             average += left + right;
         }
+
 
         horizontals.put_pixel(0, y, average.to_rgb(scalar));
 

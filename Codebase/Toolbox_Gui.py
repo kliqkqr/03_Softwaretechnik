@@ -4,6 +4,8 @@ from tkinter import *
 from CodeChart.CodeChart import CodeChart
 from Config.ConfigFile import ConfigFile
 
+from BubbleView.BubbleView import BubbleView
+
 win = Tk()
 win.title('Project Toolbox')
 win_width=0
@@ -53,15 +55,21 @@ def bubbleView_screen():
     # pack the frame and place Button and Canvas
     bubbleView_screen_frame.pack(fill="both", expand=1)
     bubbleView_back_button = Button(bubbleView_screen_frame, text='Zurück', command=start_screen)
-    bubbleView_back_button.place(relx=0.05, rely=0.925, relheight=0.05, relwidth=0.2)
+    bubbleView_back_button.place(x = 10, y = 10, width = 80, height = 30)
 
-    bubbleView_canvas = Canvas(bubbleView_screen_frame)
-    bubbleView_canvas.place(relx=0.05, rely=0.05, relwidth=0.9, relheight=0.85)
+    cf = ConfigFile()
+    cf.loadSettings()
+    # TODO: why?
+    cf.saveSettings()
+    bubbleView = BubbleView(win, bubbleView_screen_frame, cf)
 
-
-    # just a gapfiller
-    bubbleView_label = Label(bubbleView_screen_frame, text='*le Bubble View...')
-    bubbleView_label.place(relx=0.15, rely=0.45, relheight=0.1, relwidth=0.7)
+    # bubbleView_canvas = Canvas(bubbleView_screen_frame)
+    # bubbleView_canvas.place(relx=0.05, rely=0.05, relwidth=0.9, relheight=0.85)
+    #
+    #
+    # # just a gapfiller
+    # bubbleView_label = Label(bubbleView_screen_frame, text='*le Bubble View...')
+    # bubbleView_label.place(relx=0.15, rely=0.45, relheight=0.1, relwidth=0.7)
 
 
 def codeCharts_screen():
