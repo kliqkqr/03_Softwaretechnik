@@ -1,0 +1,15 @@
+Database:
+  host: mysql.hrz.tu-chemnitz.de
+  pass: Exp1234
+  user: Eyetracking_GR03_rw
+Settings:
+  BubbleView:Filter:
+  - 10
+  - Gaussian
+  BubbleView:Formen: Rechteck
+  BubbleView:Formengroesse: 10
+  CodeCharts:Rastergroesse:
+  - 10
+  - 10
+  CodeCharts:Stringordnung: true
+  CodeCharts:Wechselzeitdauer: 5
