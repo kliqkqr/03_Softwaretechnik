@@ -22,15 +22,24 @@ class BubbleView(Tool):
         self.bubble_height = 200
         self.bubble_shape  = 'ellipse'
         self.motion_min_distance = 10
+        self.blur_radius = 50
+        self.blur_iterations = 3
+        self.pixelate_diameter = 100
+        self.slider_resolution = 0.05
+        self.analyse_render_motion_width = 3
+        self.analyse_render_motion_color = 'green'
+        self.analyse_render_click_outline_with  = 2
+        self.analyse_render_click_outline_color = 'red'
+        self.analyse_render_click_fill_color = (75, 75, 75, 75)
 
         self.source_image = None
         self.target_image = None
         self.photo_image  = None
         self.canvas       = None
 
-        self.radius_var     = tk.StringVar()
-        self.iterations_var = tk.StringVar()
-        self.diameter_var   = tk.StringVar()
+        self.radius_var     = tk.StringVar(value = str(self.blur_radius))
+        self.iterations_var = tk.StringVar(value = str(self.blur_iterations))
+        self.diameter_var   = tk.StringVar(value = str(self.pixelate_diameter))
 
         self.start_timer = None
         self.clicks      = None
@@ -107,7 +116,7 @@ class BubbleView(Tool):
                     raise RuntimeError
 
                 self.target_image = image
-                self.display_image(self.target_image)
+                self.update_display_image(self.target_image)
 
         except ValueError:
             messagebox.showerror('Inputfehler',
@@ -131,7 +140,7 @@ class BubbleView(Tool):
                 raise RuntimeError
 
             self.target_image = image
-            self.display_image(self.target_image)
+            self.update_display_image(self.target_image)
 
         except ValueError:
             messagebox.showerror('Inputfehler',
@@ -154,7 +163,7 @@ class BubbleView(Tool):
                 raise RuntimeError
 
             self.target_image = image
-            self.display_image(self.target_image)
+            self.update_display_image(self.target_image)
 
         except ValueError:
             messagebox.showerror('Inputfehler',
@@ -169,15 +178,25 @@ class BubbleView(Tool):
         self.clicks      = []
         self.motions     = []
 
+        self.update_display_image(self.target_image.copy())
+
     def end_button_click(self):
-        analyse = self.render_analyse(self.source_image.copy())
+        resolution = 0.05
 
-        self.start_timer = None
-        self.clicks      = None
-        self.motions     = None
+        end_time = timer() - self.start_timer
+        end_time = math.ceil(end_time / resolution) * resolution
 
-        if analyse is not None:
-            self.display_image(analyse)
+        slider = tk.Scale(self.frame, from_ = 0, to = end_time, orient = tk.HORIZONTAL, command = self.slider_change,
+                          showvalue = True, resolution = self.slider_resolution, width = 10)
+        slider.place(x = 1000, y = 10, width = 170, height = 30)
+
+        self.update_display_image(self.source_image.copy())
+
+    def slider_change(self, event):
+        time = float(event)
+
+        analyse = self.render_analyse_until(self.source_image.copy(), time)
+        self.update_display_image(analyse)
 
     def display_image(self, image):
         self.photo_image = ImageTk.PhotoImage(image)
@@ -190,6 +209,11 @@ class BubbleView(Tool):
         self.canvas.create_image(0, 0, anchor = tk.NW, image = self.photo_image)
         self.canvas.bind('<Button-1>',  self.canvas_click)
         self.canvas.bind('<Motion>',    self.canvas_motion)
+
+    def update_display_image(self, image):
+        if self.canvas is not None:
+            self.photo_image = ImageTk.PhotoImage(image)
+            self.canvas.create_image(0, 0, anchor = tk.NW, image = self.photo_image)
 
     def canvas_click(self, event):
         if self.start_timer and self.clicks is not None:
@@ -221,11 +245,11 @@ class BubbleView(Tool):
 
     def bubble_rectangle(self, left, top, width, height):
         image = Rust.bubble_rectangle(self.target_image, self.source_image, left, top, width, height)
-        self.display_image(image)
+        self.update_display_image(image)
 
     def bubble_ellipse(self, left, top, width, height):
         image = Rust.bubble_ellipse(self.target_image, self.source_image, left, top, width, height)
-        self.display_image(image)
+        self.update_display_image(image)
 
     def display_bubble(self, x, y):
         left = x - (self.bubble_width  // 2)
@@ -240,12 +264,44 @@ class BubbleView(Tool):
         if self.clicks is not None and self.motions is not None:
             draw = ImageDraw.Draw(image, 'RGBA')
             motions = [xy for xy, t in self.motions]
-            draw.line(motions, fill = 'green', width = 3)
+            draw.line(motions, fill = self.analyse_render_motion_color, width = self.analyse_render_motion_width)
 
             for (x, y), t in self.clicks:
                 left = x - (self.bubble_width  // 2)
                 top  = y - (self.bubble_height // 2)
                 draw.ellipse([(left, top), (left + self.bubble_width, top + self.bubble_height)],
-                             fill = (75, 75, 75, 75), outline = 'red', width = 2)
+                             fill = self.analyse_render_click_fill_color,
+                             outline = self.analyse_render_click_outline_color,
+                             width = self.analyse_render_click_outline_with)
+
+            return image
+
+    def render_analyse_until(self, image, time):
+        if self.clicks is not None and self.motions is not None:
+            draw = ImageDraw.Draw(image, 'RGBA')
+            motions = []
+            clicks  = []
+
+            for xy, t in self.motions:
+                if t > time:
+                    break
+
+                motions.append(xy)
+
+            for xy, t in self.clicks:
+                if t > time:
+                    break
+
+                clicks.append(xy)
+
+            draw.line(motions, fill = self.analyse_render_motion_color, width = self.analyse_render_motion_width)
+
+            for x, y in clicks:
+                left = x - (self.bubble_width  // 2)
+                top  = y - (self.bubble_height // 2)
+                draw.ellipse([(left, top), (left + self.bubble_width, top + self.bubble_height)],
+                             fill = self.analyse_render_click_fill_color,
+                             outline = self.analyse_render_click_outline_color,
+                             width = self.analyse_render_click_outline_with)
 
             return image
