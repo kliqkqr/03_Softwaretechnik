@@ -2,12 +2,11 @@ import tkinter
 from tkinter import *
 from tkinter import messagebox
 
-from PIL import Image, ImageTk, ImageDraw
+from PIL import Image, ImageTk
 
 import random
 import string
 import time
-import numpy as np
 
 from CodeChart.ImageExplorer import ImageExplorer
 from Tool import Tool
@@ -23,6 +22,8 @@ class CodeChart(Tool):
     SHOW_IMAGE = 1
     SHOW_MATRIX = 2
     SHOW_INPUT = 3
+
+    THREAD_CYCLE_TIME = 300
 
     # Constants
     DELTA_X = 50
@@ -80,10 +81,6 @@ class CodeChart(Tool):
         # Standard white background if no codechart cycle has started
         self.image = Image.new(mode="RGB", size=(self.IMAGE_WIDTH, self.IMAGE_HEIGHT),
                                color=(255, 255, 255))
-
-        # draw = ImageDraw.Draw(self.image)
-        # draw.rectangle([(100, 100), (200, 200)], fill="green")
-        # del draw
         self.image = ImageTk.PhotoImage(self.image)
         self.canvas.create_image(self.DELTA_X, self.DELTA_Y, anchor=NW, image=self.image)
 
@@ -94,12 +91,12 @@ class CodeChart(Tool):
         self.right_button = Button(self.frame, text=self.RUN_PROGRAM_STR, command=self.show_image)
         self.right_button.place(relx=0.55, rely=0.8, relheight=0.05, relwidth=0.2)
 
-        # Redraw loop
-        self.canvas.after(1000, self.redraw())
+        # redraw loop
+        self.canvas.after(ms=self.THREAD_CYCLE_TIME, func=self.redraw)
 
     def redraw(self):
         # This method can be used to do updates at the frame before every
-        # redraw is happening.W
+        # redraw is happening.
         if self.state and time.time() >= self.time_disp_change:
             if self.state == self.SHOW_IMAGE:
                 self.state = self.SHOW_MATRIX
@@ -111,7 +108,7 @@ class CodeChart(Tool):
                 self.state = self.SHOW_INPUT
                 self.show_input()
 
-        self.canvas.after(ms=1000, func=self.redraw)
+        self.canvas.after(ms=self.THREAD_CYCLE_TIME, func=self.redraw)
 
     def abort(self):
         # Reset the state
@@ -137,7 +134,7 @@ class CodeChart(Tool):
 
         # Open up the image selection display
         image_loader = ImageExplorer(self)
-        self.image_cache = image_loader.display()
+        self.image_cache = image_loader.display()[0]
 
         # reshow the window
         self.win.deiconify()
@@ -154,6 +151,7 @@ class CodeChart(Tool):
         self.canvas.delete("all")
 
         # Set the cached image as the displayed image
+        self.image_cache = ImageExplorer.resizeImage(self.image_cache, self.IMAGE_WIDTH, self.IMAGE_HEIGHT)
         self.image = ImageTk.PhotoImage(self.image_cache)
         self.canvas.create_image(self.DELTA_X, self.DELTA_Y, anchor=NW, image=self.image)
 

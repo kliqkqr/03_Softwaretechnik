@@ -5,6 +5,7 @@ from CodeChart.CodeChart import CodeChart
 from Config.ConfigFile import ConfigFile
 
 from BubbleView.BubbleView import BubbleView
+from Datenanalyse.Datenanalyse import Datenanalyse
 
 win = Tk()
 win.title('Project Toolbox')
@@ -18,6 +19,14 @@ codeCharts_screen_frame = Frame(win, bg='grey')
 datenanalyse_screen_frame = Frame(win, bg='grey')
 settings_screen_frame = Frame(win, bg='grey')
 
+# load the settings
+cf = ConfigFile()
+cf.loadSettings()
+    # save in case no config file has been created yet
+cf.saveSettings()
+
+# Selected tool
+selected_tool = None
 
 # pack frames
 def start_screen():
@@ -57,10 +66,6 @@ def bubbleView_screen():
     bubbleView_back_button = Button(bubbleView_screen_frame, text='Zurück', command=start_screen)
     bubbleView_back_button.place(x = 10, y = 10, width = 80, height = 30)
 
-    cf = ConfigFile()
-    cf.loadSettings()
-    # TODO: why?
-    cf.saveSettings()
     bubbleView = BubbleView(win, bubbleView_screen_frame, cf)
 
     # bubbleView_canvas = Canvas(bubbleView_screen_frame)
@@ -85,10 +90,6 @@ def codeCharts_screen():
     codeCharts_back_button = Button(codeCharts_screen_frame, text='Zurück', command=start_screen)
     codeCharts_back_button.place(relx=0.05, rely=0.925, relheight=0.05, relwidth=0.2)
 
-    # settings
-    cf = ConfigFile()
-    cf.loadSettings()
-    cf.saveSettings()
     # CodeChart functionality
     codecharts = CodeChart(win, codeCharts_screen_frame, cf)
 
@@ -106,9 +107,8 @@ def datenanalyse_screen():
     datenanalyse_back_button = Button(datenanalyse_screen_frame, text='Zurück', command=start_screen)
     datenanalyse_back_button.place(relx=0.05, rely=0.925, relheight=0.05, relwidth=0.2)
 
-    # just a gapfiller
-    datenanalyse_label = Label(datenanalyse_screen_frame, text='*le Datenanalyse...', bg='grey')
-    datenanalyse_label.place(relx=0.15, rely=0.45, relheight=0.1, relwidth=0.7)
+    # Start analysis tool
+    analyse = Datenanalyse(win, datenanalyse_screen_frame)
 
 def settings_screen():
     hide_all_frames()

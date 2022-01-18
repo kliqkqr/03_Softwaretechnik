@@ -25,6 +25,7 @@ class ImageExplorer:
     def __init__(self, code_charts):
         # The outcome
         self.selected_image = None
+        self.selected_image_path = None
 
         # Window display
         self.canvas = None
@@ -73,7 +74,7 @@ class ImageExplorer:
             self.image_list.append(ph_img)  # save images, otherwise they won't be displayed
 
             # Display the image button
-            callback = partial(self.select_image, img)
+            callback = partial(self.select_image, img, image)
             img_button = tk.Button(self.win, text=image, image=ph_img, command=callback)
             img_button.place(relx=x_diff + i_x/x_max, rely=y_diff+i_y/y_max,
                              relwidth=self.IMAGE_DISP_WIDTH/self.WINDOW_WIDTH,
@@ -94,7 +95,7 @@ class ImageExplorer:
         self.canvas.after(ms=1000, func=self.redraw)
 
         self.win.mainloop()
-        return self.selected_image
+        return [self.selected_image, self.selected_image_path]
 
     def redraw(self):
         self.canvas.after(ms=1000, func=self.redraw)
@@ -103,9 +104,17 @@ class ImageExplorer:
         self.win.quit()
         self.win.destroy()
 
-    def select_image(self, image):
+    def select_image(self, image, img_path):
         # Set the selected image
         self.selected_image = image
+        self.selected_image_path = img_path
 
         # Close the window and proceed in CodeCharts
         self.close_and_quit()
+
+    @staticmethod
+    def resizeImage(image, width, height):
+        height_percent = (height / float(image.size[1]))
+        width_size = int((float(image.size[0]) * float(height_percent)))
+        image = image.resize((width, height), PIL.Image.NEAREST)
+        return image
