@@ -1,4 +1,7 @@
 .idea
 venv
+__pycache__/
+
+# Outdated
 Vorlagen
 MeilensteineVorlagen/ 
