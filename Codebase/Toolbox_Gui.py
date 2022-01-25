@@ -4,7 +4,7 @@ from tkinter import *
 from CodeChart.CodeChart import CodeChart
 from Config.ConfigFile import ConfigFile
 
-from BubbleView.BubbleView import BubbleView
+from BubbleView.BubbleView import BubbleViewTrial
 
 win = Tk()
 win.title('Project Toolbox')
@@ -61,7 +61,7 @@ def bubbleView_screen():
     cf.loadSettings()
     # TODO: why?
     cf.saveSettings()
-    bubbleView = BubbleView(win, bubbleView_screen_frame, cf)
+    bubbleView = BubbleViewTrial(win, bubbleView_screen_frame, cf)
 
     # bubbleView_canvas = Canvas(bubbleView_screen_frame)
     # bubbleView_canvas.place(relx=0.05, rely=0.05, relwidth=0.9, relheight=0.85)
