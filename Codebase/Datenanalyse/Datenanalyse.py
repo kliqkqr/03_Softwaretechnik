@@ -51,7 +51,7 @@ class Datenanalyse(Tool):
         self.win.deiconify()
 
         # Set the code charts analysis view
-        self.view = DatenanalyseCodeChartsGUI(self, self.canvas, image, image_path)
+        self.view = DatenanalyseCodeChartsGUI(self, self.frame, self.canvas, image, image_path)
 
     def startBVAnalysis(self):
         # TODO
@@ -61,17 +61,35 @@ class Datenanalyse(Tool):
     #  METHODS FOR THE ANALYTICS #
     ##############################
 
+    # inspired by: https://stackoverflow.com/questions/42481203/heatmap-on-top-of-image
     def calculateImageHeatmap(self, image_name, image_size):
         # TODO implement: viewpoints = database.getImageViewPoints(image_name)
         # For now random points:
-        viewpoints = [np.random.random((1, 2)) for i in range(5)]
+        viewpoints = [np.random.random((1, 2)) for i in range(10)]
 
-        # Create an empty map, matching the image size
-        heat_map = np.zeros((image_size[1], image_size[0]))
+        # Create a mesh grid, matching the image size
+        # p = np.asarray(I).astype('float')
+        w, h = image_size # I.size
+        y, x = np.mgrid[0:h, 0:w]
+
+        # Calculate Gauss activation for viewpoints on the image
+        heatmap = None
         for point in viewpoints:
             point = point[0]
-            x = math.floor(point[0] * image_size[0])
-            y = math.floor(point[1] * image_size[1])
-            heat_map[y][x] = 0.5
+            x_abs = math.floor(point[0] * image_size[0])
+            y_abs = math.floor(point[1] * image_size[1])
 
-        return heat_map
+            if heatmap is None:
+                heatmap = self.twoD_Gaussian(x, y, x_abs, y_abs, .025 * x.max(), .025 * y.max())
+            else:
+                heatmap = heatmap + self.twoD_Gaussian(x, y, x_abs, y_abs, .025 * x.max(), .025 * y.max())
+
+        return [x, y, heatmap.reshape(x.shape[0], y.shape[1])]
+
+    @staticmethod
+    def twoD_Gaussian(x, y, xo, yo, sigma_x, sigma_y):
+        # 2D Gaussian function
+        a = (1./(2*sigma_x**2) + 1./(2*sigma_y**2))
+        c = (1./(2*sigma_x**2) + 1./(2*sigma_y**2))
+        g = np.exp( - (a*((x-xo)**2) + c*((y-yo)**2)))
+        return g.ravel()

@@ -1,0 +1,7 @@
+rust_extern-0.1.0.dist-info/INSTALLER,sha256=zuuue4knoyJ-UwPPXg8fezS7VCrXJQrAP7zeNuwvFQg,4
+rust_extern-0.1.0.dist-info/METADATA,sha256=u5ZPKwAlnXl0gtVJk37nuHSiyz6fzJtKcXu20JMJ5f4,260
+rust_extern-0.1.0.dist-info/RECORD,,
+rust_extern-0.1.0.dist-info/WHEEL,sha256=blwfyJHRYNHPNKnQGj6DWcLF-PgDyVpkwAPXlLRodzY,95
+rust_extern/__init__.py,sha256=EpM4Ol2obBtd3b3z-6GC2E-ArrDU0pPsfW89MiLgPjs,58
+rust_extern/__pycache__/__init__.cpython-38.pyc,,
+rust_extern/rust_extern.pyd,sha256=GZiP6TPMOfLVwniIponzt94bpQti0sWPCTOoNEd8bLk,336896

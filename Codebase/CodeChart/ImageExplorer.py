@@ -1,4 +1,4 @@
-import os
+import os, sys
 
 from PIL import ImageTk
 import PIL.Image
@@ -10,7 +10,6 @@ import glob
 from functools import partial
 
 
-
 class ImageExplorer:
 
     WINDOW_WIDTH = 600
@@ -20,7 +19,7 @@ class ImageExplorer:
     IMAGE_DISP_HEIGHT = 140
     BORDER_LENGTH = 5
 
-    IMAGE_LIB_PATH = 'CodeChart/images/'
+    IMAGE_LIB_PATH = 'images'
 
     def __init__(self, code_charts):
         # The outcome
@@ -33,7 +32,8 @@ class ImageExplorer:
         self.code_charts = code_charts
 
         # Lookup all provided images in the python package
-        self.image_path_list = glob.glob(self.IMAGE_LIB_PATH + '*.jpg')
+        path = self.getAllImages(self.IMAGE_LIB_PATH)
+        self.image_path_list = glob.glob(path + '/*.jpg')
         self.image_list = []
 
     def display(self):
@@ -118,3 +118,11 @@ class ImageExplorer:
         width_size = int((float(image.size[0]) * float(height_percent)))
         image = image.resize((width, height), PIL.Image.NEAREST)
         return image
+
+    @staticmethod
+    def getAllImages(path):
+        # Check if MEIPASS attribute is available in sys else return current file path
+        bundle_dir = getattr(sys, '_MEIPASS',
+                             os.path.abspath(os.path.dirname(__file__)))
+        path_to_img = os.path.abspath(os.path.join(bundle_dir, path))
+        return path_to_img

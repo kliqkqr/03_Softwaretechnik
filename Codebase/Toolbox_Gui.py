@@ -4,7 +4,9 @@ from tkinter import *
 from CodeChart.CodeChart import CodeChart
 from Config.ConfigFile import ConfigFile
 
-from BubbleView.BubbleView import BubbleView
+from BubbleView.BubbleView import BubbleViewTrial
+from EyeTracking.EyeTracking import EyeTracking
+from Datenanalyse.Datenanalyse import Datenanalyse
 
 win = Tk()
 win.title('Project Toolbox')
@@ -15,8 +17,18 @@ win_height=0
 start_screen_frame = Frame(win, bg='grey')
 bubbleView_screen_frame = Frame(win, bg='grey')
 codeCharts_screen_frame = Frame(win, bg='grey')
+eyeTracking_screen_frame = Frame(win, bg='grey')
 datenanalyse_screen_frame = Frame(win, bg='grey')
 settings_screen_frame = Frame(win, bg='grey')
+
+# load the settings
+cf = ConfigFile()
+cf.loadSettings()
+# save in case no config file has been created yet
+cf.saveSettings()
+
+# Selected tool
+selected_tool = None
 
 
 # pack frames
@@ -32,16 +44,19 @@ def start_screen():
     start_screen_frame.pack(fill="both", expand=1)
 
     bubbleView_button = Button(start_screen_frame, text='Bubble View', command=bubbleView_screen)
-    bubbleView_button.place(relx=0.15, rely=0.15, relheight=0.1, relwidth=0.7)
+    bubbleView_button.place(relx=0.15, rely=0.05, relheight=0.1, relwidth=0.7)
 
     codeCharts_button = Button(start_screen_frame, text='Code Charts', command=codeCharts_screen)
-    codeCharts_button.place(relx=0.15, rely=0.35, relheight=0.1, relwidth=0.7)
+    codeCharts_button.place(relx=0.15, rely=0.25, relheight=0.1, relwidth=0.7)
+
+    eyetracking_button = Button(start_screen_frame, text='Eyetracking', command=eyeTracking_screen)
+    eyetracking_button.place(relx=0.15, rely=0.45, relheight=0.1, relwidth=0.7)
 
     datenanalyse_button = Button(start_screen_frame, text='Datenanalyse', command=datenanalyse_screen)
-    datenanalyse_button.place(relx=0.15, rely=0.55, relheight=0.1, relwidth=0.7)
+    datenanalyse_button.place(relx=0.15, rely=0.65, relheight=0.1, relwidth=0.7)
 
     settings_button = Button(start_screen_frame, text='Einstellungen', command=settings_screen)
-    settings_button.place(relx=0.15, rely=0.75, relheight=0.1, relwidth=0.7)
+    settings_button.place(relx=0.15, rely=0.85, relheight=0.1, relwidth=0.7)
 
 
 def bubbleView_screen():
@@ -57,19 +72,10 @@ def bubbleView_screen():
     bubbleView_back_button = Button(bubbleView_screen_frame, text='Zurück', command=start_screen)
     bubbleView_back_button.place(x = 10, y = 10, width = 80, height = 30)
 
-    cf = ConfigFile()
-    cf.loadSettings()
-    # TODO: why?
-    cf.saveSettings()
-    bubbleView = BubbleView(win, bubbleView_screen_frame, cf)
+    bubbleView = BubbleViewTrial(win, bubbleView_screen_frame, cf)
 
-    # bubbleView_canvas = Canvas(bubbleView_screen_frame)
-    # bubbleView_canvas.place(relx=0.05, rely=0.05, relwidth=0.9, relheight=0.85)
-    #
-    #
-    # # just a gapfiller
-    # bubbleView_label = Label(bubbleView_screen_frame, text='*le Bubble View...')
-    # bubbleView_label.place(relx=0.15, rely=0.45, relheight=0.1, relwidth=0.7)
+    bubbleView_canvas = Canvas(bubbleView_screen_frame)
+    bubbleView_canvas.place(relx=0.05, rely=0.05, relwidth=0.9, relheight=0.85)
 
 
 def codeCharts_screen():
@@ -85,12 +91,24 @@ def codeCharts_screen():
     codeCharts_back_button = Button(codeCharts_screen_frame, text='Zurück', command=start_screen)
     codeCharts_back_button.place(relx=0.05, rely=0.925, relheight=0.05, relwidth=0.2)
 
-    # settings
-    cf = ConfigFile()
-    cf.loadSettings()
-    cf.saveSettings()
     # CodeChart functionality
     codecharts = CodeChart(win, codeCharts_screen_frame, cf)
+
+def eyeTracking_screen():
+    hide_all_frames()
+
+    # resize the window for the current tool
+    win_height=700 # numbers just for testing purpose
+    win_width=900
+    win.geometry(f"{win_width}x{win_height}")
+
+    # place Button and pack the frame
+    eyeTracking_screen_frame.pack(fill="both", expand=1)
+    #eyeTracking_back_button = Button(codeCharts_screen_frame, text='Zurück', command=start_screen)
+    #eyeTracking_back_button.place(relx=0.05, rely=0.925, relheight=0.05, relwidth=0.2)
+
+    # EyeTracking functionality
+    eyetracking = EyeTracking(win, eyeTracking_screen_frame, start_screen)
 
 
 def datenanalyse_screen():
@@ -106,9 +124,8 @@ def datenanalyse_screen():
     datenanalyse_back_button = Button(datenanalyse_screen_frame, text='Zurück', command=start_screen)
     datenanalyse_back_button.place(relx=0.05, rely=0.925, relheight=0.05, relwidth=0.2)
 
-    # just a gapfiller
-    datenanalyse_label = Label(datenanalyse_screen_frame, text='*le Datenanalyse...', bg='grey')
-    datenanalyse_label.place(relx=0.15, rely=0.45, relheight=0.1, relwidth=0.7)
+    # Start analysis tool
+    analyse = Datenanalyse(win, datenanalyse_screen_frame)
 
 def settings_screen():
     hide_all_frames()
@@ -140,6 +157,9 @@ def hide_all_frames():
     for widget in codeCharts_screen_frame.winfo_children():
         widget.destroy()
 
+    for widget in eyeTracking_screen_frame.winfo_children():
+        widget.destroy()
+
     for widget in datenanalyse_screen_frame.winfo_children():
         widget.destroy()
 
@@ -150,6 +170,7 @@ def hide_all_frames():
     start_screen_frame.pack_forget()
     bubbleView_screen_frame.pack_forget()
     codeCharts_screen_frame.pack_forget()
+    eyeTracking_screen_frame.pack_forget()
     datenanalyse_screen_frame.pack_forget()
     settings_screen_frame.pack_forget()
 
