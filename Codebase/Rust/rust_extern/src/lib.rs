@@ -12,15 +12,39 @@ use img::filter::pixelate::{square, square_parallel};
 use img::bubble;
 
 #[pyfunction]
-fn bubble_box_blur_rectangle<'a>(py : Python<'a>,
-                                 b_width : u32, b_height : u32, b_bytes : &PyBytes,
-                                 f_width : u32, f_height : u32, f_bytes : &PyBytes,
-                                 left : u32, top : u32, width : u32, height : u32,
-                                 left_radii : &PyBytes, top_radii : &PyBytes,
-                                 inside_radius : u32, outside_radius : u32,
-                                 iterations : u32)
-                                 -> &'a PyBytes {
+fn bubble_power_ellipse_interpolation<'a>(py : Python<'a>,
+                                          b_width : u32, b_height : u32, b_bytes : &PyBytes,
+                                          f_width : u32, f_height : u32, f_bytes : &PyBytes,
+                                          left : i32, top : i32, width : u32, height : u32, exponent : f64)
+                                          -> &'a PyBytes {
+    let b_buf = Vec::from(b_bytes.as_bytes());
+    let f_buf = Vec::from(f_bytes.as_bytes());
 
+    let (b_img, f_img) = match (RgbImage::from_raw(b_width, b_height, b_buf), RgbImage::from_raw(f_width, f_height, f_buf)) {
+        (Some(b_img), Some(f_img)) => (b_img, f_img),
+        _                          => return PyBytes::new(py, &[])
+    };
+
+    let img = bubble::power_ellipse_interpolation(b_img, &f_img, left, top, width, height, exponent);
+    PyBytes::new(py, img.into_raw().as_bytes())
+}
+
+#[pyfunction]
+fn bubble_power_rectangle_interpolation<'a>(py : Python<'a>,
+                                            b_width : u32, b_height : u32, b_bytes : &PyBytes,
+                                            f_width : u32, f_height : u32, f_bytes : &PyBytes,
+                                            left : i32, top : i32, width : u32, height : u32, exponent : f64)
+                                            -> &'a PyBytes {
+    let b_buf = Vec::from(b_bytes.as_bytes());
+    let f_buf = Vec::from(f_bytes.as_bytes());
+
+    let (b_img, f_img) = match (RgbImage::from_raw(b_width, b_height, b_buf), RgbImage::from_raw(f_width, f_height, f_buf)) {
+        (Some(b_img), Some(f_img)) => (b_img, f_img),
+        _                          => return PyBytes::new(py, &[])
+    };
+
+    let img = bubble::power_rectangle_interpolation(b_img, &f_img, left, top, width, height, exponent);
+    PyBytes::new(py, img.into_raw().as_bytes())
 }
 
 #[pyfunction]
@@ -103,5 +127,7 @@ fn rust_extern(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pixelate_square, m)?)?;
     m.add_function(wrap_pyfunction!(bubble_rectangle, m)?)?;
     m.add_function(wrap_pyfunction!(bubble_ellipse, m)?)?;
+    m.add_function(wrap_pyfunction!(bubble_power_ellipse_interpolation, m)?)?;
+    m.add_function(wrap_pyfunction!(bubble_power_rectangle_interpolation, m)?)?;
     Ok(())
 }

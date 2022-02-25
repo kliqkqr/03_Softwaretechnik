@@ -3,6 +3,56 @@ import rust_extern
 from PIL import Image
 
 
+def bubble_power_ellipse_interpolation(background, foreground, left, top, width, height, exponent):
+    b_width, b_height = background.size
+    f_width, f_height = foreground.size
+    b_bytes = background.tobytes()
+    f_bytes = foreground.tobytes()
+
+    left   = int(left)
+    top    = int(top)
+    width  = int(width)
+    height = int(height)
+
+    if not (width >= 0 and height >= 0):
+        return None
+
+    r_bytes = rust_extern.bubble_power_ellipse_interpolation(b_width, b_height, b_bytes,
+                                                             f_width, f_height, f_bytes,
+                                                             left, top, width, height,
+                                                             exponent)
+
+    if r_bytes == bytes() and b_width != 0 and b_height != 0:
+        return None
+
+    return Image.frombuffer('RGB', (b_width, b_height), r_bytes)
+
+
+def bubble_power_rectangle_interpolation(background, foreground, left, top, width, height, exponent):
+    b_width, b_height = background.size
+    f_width, f_height = foreground.size
+    b_bytes = background.tobytes()
+    f_bytes = foreground.tobytes()
+
+    left   = int(left)
+    top    = int(top)
+    width  = int(width)
+    height = int(height)
+
+    if not (width >= 0 and height >= 0):
+        return None
+
+    r_bytes = rust_extern.bubble_power_rectangle_interpolation(b_width, b_height, b_bytes,
+                                                               f_width, f_height, f_bytes,
+                                                               left, top, width, height,
+                                                               exponent)
+
+    if r_bytes == bytes() and b_width != 0 and b_height != 0:
+        return None
+
+    return Image.frombuffer('RGB', (b_width, b_height), r_bytes)
+
+
 def bubble_rectangle(background, foreground, left, top, width, height):
     b_width, b_height = background.size
     f_width, f_height = foreground.size

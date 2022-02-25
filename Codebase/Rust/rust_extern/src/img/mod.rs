@@ -104,6 +104,13 @@ impl std::ops::Sub for RgbF {
     }
 }
 
+impl std::ops::Sub for &RgbF {
+    type Output = RgbF;
+    fn sub(self, rhs : &RgbF) -> RgbF {
+        RgbF{r : self.r - rhs.r, g : self.g - rhs.g, b : self.b - rhs.b}
+    }
+}
+
 impl std::ops::SubAssign for RgbF {
     fn sub_assign(&mut self, rhs: Self) {
         self.r -= rhs.r;
