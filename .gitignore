@@ -5,3 +5,6 @@ __pycache__/
 # Outdated
 Vorlagen
 MeilensteineVorlagen/ 
+
+Codebase/Rust/rust_extern/target/*
+!Codebase/Rust/rust_extern/target/wheels
