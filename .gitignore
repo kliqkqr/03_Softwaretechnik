@@ -8,3 +8,7 @@ MeilensteineVorlagen/
 
 Codebase/Rust/rust_extern/target/*
 !Codebase/Rust/rust_extern/target/wheels
+
+venv310
+
+dlib-19.23
