@@ -457,6 +457,9 @@ class BubbleViewTrialTool(BubbleViewTool):
         pass
 
         # class BubbleViewTool(Tool):
+
+
+#
 #     # Defaults
 #     _DEFAULT_MENU_BAR_WIDGET_WIDTH  = 80
 #     _DEFAULT_MENU_BAR_WIDGET_HEIGHT = 30

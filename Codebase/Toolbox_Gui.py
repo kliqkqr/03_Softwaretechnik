@@ -4,7 +4,7 @@ from tkinter import *
 from CodeChart.CodeChart import CodeChart
 from Config.ConfigFile import ConfigFile
 
-from BubbleView.BubbleView import BubbleViewTrial
+from BubbleView.BubbleView import BubbleViewTrialTool
 from EyeTracking.EyeTracking import EyeTracking
 from Datenanalyse.Datenanalyse import Datenanalyse
 
@@ -69,13 +69,13 @@ def bubbleView_screen():
 
     # pack the frame and place Button and Canvas
     bubbleView_screen_frame.pack(fill="both", expand=1)
-    bubbleView_back_button = Button(bubbleView_screen_frame, text='Zurück', command=start_screen)
-    bubbleView_back_button.place(x = 10, y = 10, width = 80, height = 30)
+    # bubbleView_back_button = Button(bubbleView_screen_frame, text='Zurück', command=start_screen)
+    # bubbleView_back_button.place(x = 10, y = 10, width = 80, height = 30)
 
-    bubbleView = BubbleViewTrial(win, bubbleView_screen_frame, cf)
+    bubbleView = BubbleViewTrialTool(win, bubbleView_screen_frame, cf, on_back_callback = start_screen)
 
-    bubbleView_canvas = Canvas(bubbleView_screen_frame)
-    bubbleView_canvas.place(relx=0.05, rely=0.05, relwidth=0.9, relheight=0.85)
+    # bubbleView_canvas = Canvas(bubbleView_screen_frame)
+    # bubbleView_canvas.place(relx=0.05, rely=0.05, relwidth=0.9, relheight=0.85)
 
 
 def codeCharts_screen():
