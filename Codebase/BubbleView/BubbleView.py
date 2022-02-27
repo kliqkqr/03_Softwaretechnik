@@ -234,7 +234,7 @@ class BubbleViewTrialTool(BubbleViewTool):
             reverse_button.grid(column = 0, row = 1, **self._padding_kwargs(), **self._margin_kwargs())
 
             apply_button = tk.Button(self._menu_bar_filter_choice_frame, text = 'Anwenden',
-                                         command = self._menu_bar_filter_choice_apply_button_click)
+                                     command = self._menu_bar_filter_choice_apply_button_click)
             apply_button.configure(width = max_choice_len)
             apply_button.grid(column = 1, row = 1, **self._padding_kwargs(), **self._margin_kwargs())
 
