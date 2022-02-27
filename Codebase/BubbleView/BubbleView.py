@@ -12,7 +12,7 @@ from tkinter import filedialog as fd, messagebox
 from Rust import Rust
 
 from ImageFilter import ImageFilter
-from Tool        import Tool
+from Tool import Tool
 
 
 class BubbleViewStudy(Tool):

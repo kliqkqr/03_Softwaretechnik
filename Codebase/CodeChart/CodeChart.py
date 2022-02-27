@@ -9,10 +9,10 @@ import string
 import time
 
 from CodeChart.ImageExplorer import ImageExplorer
-from Tool import Tool
 from Config.Einstellungen.Wechselzeitdauer import Wechselzeitdauer
 from Config.Einstellungen.Stringordnung import Stringordnung
 from Config.Einstellungen.Rastergroesse import Rastergroesse
+from Tool import Tool
 
 
 class CodeChart(Tool):
