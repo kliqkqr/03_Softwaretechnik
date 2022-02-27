@@ -1,0 +1,51 @@
+digraph "packages" {
+rankdir=BT
+charset="utf-8"
+"Codebase" [color="black", label="Codebase", shape="box", style="solid"];
+"Codebase.BubbleView" [color="black", label="Codebase.BubbleView", shape="box", style="solid"];
+"Codebase.BubbleView.BubbleView" [color="black", label="Codebase.BubbleView.BubbleView", shape="box", style="solid"];
+"Codebase.CodeChart" [color="black", label="Codebase.CodeChart", shape="box", style="solid"];
+"Codebase.CodeChart.CodeChart" [color="black", label="Codebase.CodeChart.CodeChart", shape="box", style="solid"];
+"Codebase.CodeChart.ImageExplorer" [color="black", label="Codebase.CodeChart.ImageExplorer", shape="box", style="solid"];
+"Codebase.CodeChart.ImageFileLoader" [color="black", label="Codebase.CodeChart.ImageFileLoader", shape="box", style="solid"];
+"Codebase.Config" [color="black", label="Codebase.Config", shape="box", style="solid"];
+"Codebase.Config.ConfigFile" [color="black", label="Codebase.Config.ConfigFile", shape="box", style="solid"];
+"Codebase.Config.DefaultConfig" [color="black", label="Codebase.Config.DefaultConfig", shape="box", style="solid"];
+"Codebase.Config.Einstellungen" [color="black", label="Codebase.Config.Einstellungen", shape="box", style="solid"];
+"Codebase.Config.Einstellungen.Einstellung" [color="black", label="Codebase.Config.Einstellungen.Einstellung", shape="box", style="solid"];
+"Codebase.Config.Einstellungen.Filter" [color="black", label="Codebase.Config.Einstellungen.Filter", shape="box", style="solid"];
+"Codebase.Config.Einstellungen.Formen" [color="black", label="Codebase.Config.Einstellungen.Formen", shape="box", style="solid"];
+"Codebase.Config.Einstellungen.Formengroesse" [color="black", label="Codebase.Config.Einstellungen.Formengroesse", shape="box", style="solid"];
+"Codebase.Config.Einstellungen.Rastergroesse" [color="black", label="Codebase.Config.Einstellungen.Rastergroesse", shape="box", style="solid"];
+"Codebase.Config.Einstellungen.StandardEinstellung" [color="black", label="Codebase.Config.Einstellungen.StandardEinstellung", shape="box", style="solid"];
+"Codebase.Config.Einstellungen.Stringordnung" [color="black", label="Codebase.Config.Einstellungen.Stringordnung", shape="box", style="solid"];
+"Codebase.Config.Einstellungen.Wechselzeitdauer" [color="black", label="Codebase.Config.Einstellungen.Wechselzeitdauer", shape="box", style="solid"];
+"Codebase.Config.Sektion" [color="black", label="Codebase.Config.Sektion", shape="box", style="solid"];
+"Codebase.Datenanalyse" [color="black", label="Codebase.Datenanalyse", shape="box", style="solid"];
+"Codebase.Datenanalyse.Client" [color="black", label="Codebase.Datenanalyse.Client", shape="box", style="solid"];
+"Codebase.Datenanalyse.Datenanalyse" [color="black", label="Codebase.Datenanalyse.Datenanalyse", shape="box", style="solid"];
+"Codebase.EyeTracking" [color="black", label="Codebase.EyeTracking", shape="box", style="solid"];
+"Codebase.EyeTracking.EyeTracking" [color="black", label="Codebase.EyeTracking.EyeTracking", shape="box", style="solid"];
+"Codebase.ImageFilter" [color="black", label="Codebase.ImageFilter", shape="box", style="solid"];
+"Codebase.ImageFilter.ImageFilter" [color="black", label="Codebase.ImageFilter.ImageFilter", shape="box", style="solid"];
+"Codebase.Speichermedium" [color="black", label="Codebase.Speichermedium", shape="box", style="solid"];
+"Codebase.Speichermedium.Datenverwaltungssystem" [color="black", label="Codebase.Speichermedium.Datenverwaltungssystem", shape="box", style="solid"];
+"Codebase.Speichermedium.Speicher" [color="black", label="Codebase.Speichermedium.Speicher", shape="box", style="solid"];
+"Codebase.Speichermedium.Verschlüsselung" [color="black", label="Codebase.Speichermedium.Verschlüsselung", shape="box", style="solid"];
+"Codebase.Tool" [color="black", label="Codebase.Tool", shape="box", style="solid"];
+"Codebase.Tool.Tool" [color="black", label="Codebase.Tool.Tool", shape="box", style="solid"];
+"Codebase.Toolbox_Gui" [color="black", label="Codebase.Toolbox_Gui", shape="box", style="solid"];
+"Codebase.database" [color="black", label="Codebase.database", shape="box", style="solid"];
+"Codebase.Config.Einstellungen.Filter" -> "Codebase.Config.Einstellungen.Einstellung" [arrowhead="open", arrowtail="none"];
+"Codebase.Config.Einstellungen.Formen" -> "Codebase.Config.Einstellungen.Einstellung" [arrowhead="open", arrowtail="none"];
+"Codebase.Config.Einstellungen.Formengroesse" -> "Codebase.Config.Einstellungen.Einstellung" [arrowhead="open", arrowtail="none"];
+"Codebase.Config.Einstellungen.Rastergroesse" -> "Codebase.Config.Einstellungen.Einstellung" [arrowhead="open", arrowtail="none"];
+"Codebase.Config.Einstellungen.StandardEinstellung" -> "Codebase.Config.Einstellungen.Einstellung" [arrowhead="open", arrowtail="none"];
+"Codebase.Config.Einstellungen.Stringordnung" -> "Codebase.Config.Einstellungen.Einstellung" [arrowhead="open", arrowtail="none"];
+"Codebase.Config.Einstellungen.Wechselzeitdauer" -> "Codebase.Config.Einstellungen.Einstellung" [arrowhead="open", arrowtail="none"];
+"Codebase.Toolbox_Gui" -> "Codebase.BubbleView.BubbleView" [arrowhead="open", arrowtail="none"];
+"Codebase.Toolbox_Gui" -> "Codebase.CodeChart.CodeChart" [arrowhead="open", arrowtail="none"];
+"Codebase.Toolbox_Gui" -> "Codebase.Config.ConfigFile" [arrowhead="open", arrowtail="none"];
+"Codebase.Toolbox_Gui" -> "Codebase.Datenanalyse.Datenanalyse" [arrowhead="open", arrowtail="none"];
+"Codebase.Toolbox_Gui" -> "Codebase.EyeTracking.EyeTracking" [arrowhead="open", arrowtail="none"];
+}

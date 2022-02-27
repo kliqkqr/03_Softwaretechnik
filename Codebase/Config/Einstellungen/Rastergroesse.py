@@ -1,4 +1,4 @@
-from Config.Einstellungen.Einstellung import Einstellung
+from .Einstellung import Einstellung
 
 
 class Rastergroesse(Einstellung):

@@ -1,35 +1,46 @@
+from msilib.schema import Binary
 import mysql.connector      # needs pip install mysql-connector-python
 
-# create tables
-#mycursor.execute("CREATE TABLE CodeCharts (id int NOT NULL PRIMARY KEY AUTO_INCREMENT, image_id int, eye_position_x JSON, eye_position_y JSON)")
-#mycursor.execute("CREATE TABLE BubbleView (id int NOT NULL PRIMARY KEY AUTO_INCREMENT, image_id int, eye_position_x JSON, eye_position_y JSON, timestamps JSON, filter_used JSON, geometry_used JSON)")
-
-def saveCodeCharts(image_id, eye_position_x, eye_position_y):
+def saveCodeCharts(imageFilePath, eye_position_x, eye_position_y):
     # connect to mysql server   !!! works only within the TU Chemnitz network or via VPN Connection !!!
     conn = mysql.connector.connect(host = "mysql.hrz.tu-chemnitz.de", user = "Eyetracking_GR03_rw", passwd = "Duciev4j", database="Eyetracking_GR03")
     mycursor = conn.cursor()
+    
+    # create table
+    mycursor.execute("CREATE TABLE IF NOT EXISTS CodeCharts (id int NOT NULL PRIMARY KEY AUTO_INCREMENT, image LONGBLOB NOT NULL, eye_position_x JSON, eye_position_y JSON)")
 
+    # convert picture into BLOB
+    with open(imageFilePath, "rb") as File:
+        binaryData = File.read()
+    
     # convert arrays to strings
     string_x = ",".join(map(str,eye_position_x))
     string_y = ",".join(map(str,eye_position_y))
 
     # execute sql commands
-    mycursor.execute("INSERT INTO CodeCharts (image_id,eye_position_x,eye_position_y) VALUES (%s,%s,%s)", (image_id, string_x, string_y))
+    mycursor.execute("INSERT INTO CodeCharts (image,eye_position_x,eye_position_y) VALUES (%s,%s,%s)", (binaryData, string_x, string_y))
     conn.commit()
 
     
-def saveBubbleView(image_id, eye_position_x, eye_position_y, timestamps, filter_used, geometry_used):
+def saveBubbleView(imageFilePath, eye_position_x, eye_position_y, timestamps, filter_used, geometry_used):
     # connect to mysql server
     conn = mysql.connector.connect(host = "mysql.hrz.tu-chemnitz.de", user = "Eyetracking_GR03_rw", passwd = "Duciev4j", database="Eyetracking_GR03")
     mycursor = conn.cursor()
 
+    # create table
+    mycursor.execute("CREATE TABLE IF NOT EXISTS BubbleView (id int NOT NULL PRIMARY KEY AUTO_INCREMENT, image LONGBLOB NOT NULL, eye_position_x JSON, eye_position_y JSON, timestamps JSON, filter_used JSON, geometry_used JSON)")
+
+    # convert picture into BLOB
+    with open(imageFilePath, "rb") as File:
+        binaryData = File.read()
+    
     # convert arrays to strings
     string_x = ",".join(map(str,eye_position_x))
     string_y = ",".join(map(str,eye_position_y))
     string_time = ",".join(map(str,timestamps))
 
     # execute sql commands
-    mycursor.execute("INSERT INTO BubbleView (image_id,eye_position_x,eye_position_y,timestamps, filter_used, geometry_used) VALUES (%s,%s,%s,%s,%s,%s)", (image_id, string_x, string_y, string_time, filter_used, geometry_used))
+    mycursor.execute("INSERT INTO BubbleView (image,eye_position_x,eye_position_y,timestamps, filter_used, geometry_used) VALUES (%s,%s,%s,%s,%s,%s)", (binaryData, string_x, string_y, string_time, filter_used, geometry_used))
     conn.commit()
 
 
@@ -47,7 +58,7 @@ def getCodeCharts():
         
     while row is not None:
         id = row[0]                         # row is array
-        image_id = row[1]
+        image_data = row[1]
         string_x = row[2]
         string_x = string_x.decode("utf-8") # decode data from byte-like to string
         string_y = row[3]
@@ -61,7 +72,7 @@ def getCodeCharts():
         eye_position_x = [int(array_x) for array_x in array_x]
         eye_position_y = [int(array_y) for array_y in array_y]
 
-        my_row = [id, image_id, eye_position_x, eye_position_y]
+        my_row = [id, image_data, eye_position_x, eye_position_y]
         result.append(my_row)
 
         row = mycursor.fetchone()
@@ -83,7 +94,7 @@ def getBubbleView():
         
     while row is not None:
         id = row[0]                                 # row is array of columns
-        image_id = row[1]
+        image_data = row[1]
         string_x = row[2]
         string_x = string_x.decode("utf-8")         # decode data from byte-like type to string
         string_y = row[3]
@@ -105,7 +116,7 @@ def getBubbleView():
         eye_position_y = [int(array_y) for array_y in array_y]
         timestamps = [float(array_time) for array_time in array_time]
 
-        my_row = [id, image_id, eye_position_x, eye_position_y, timestamps, filter_used, geometry_used]
+        my_row = [id, image_data, eye_position_x, eye_position_y, timestamps, filter_used, geometry_used]
         result.append(my_row)
 
         row = mycursor.fetchone()
