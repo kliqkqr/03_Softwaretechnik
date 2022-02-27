@@ -150,6 +150,7 @@ class Trial:
         return False
 
     def save_to_database(self):
+        pass
 
     def __len__(self):
         return len(self._cases)
