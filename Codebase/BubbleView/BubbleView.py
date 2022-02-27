@@ -3,46 +3,86 @@ import tkinter.ttk as tkk
 import os
 import math
 
-from abc     import ABC, abstractmethod
 from timeit  import default_timer as timer
 from PIL     import Image, ImageTk, ImageDraw
 from tkinter import filedialog as fd, messagebox
 
-from Rust import Rust
+import database
 
+from Rust import Rust
 from ImageFilter import ImageFilter
 from Tool import Tool
 
 
-class ImageMetaLocal:
-    def __init__(self):
-        pass
+class Bubble:
+    _SHAPE_ELLIPSE   = 'ellipse'
+    _SHAPE_RECTANGLE = 'rectangle'
 
-    def meta_type(self):
-        return 'local'
+    def __init__(self, width, height, exponent, shape):
+        self._width    = width
+        self._height   = height
+        self._exponent = exponent
+        self._shape    = shape
 
+    @staticmethod
+    def DiscreteEllipse(width, height):
+        return Bubble(width, height, None, Bubble._SHAPE_ELLIPSE)
 
-class ImageMetaDatabase:
-    def __init__(self, id):
-        self._id = id
+    @staticmethod
+    def DiscreteRectangle(width, height):
+        return Bubble(width, height, None, Bubble._SHAPE_RECTANGLE)
 
-    def meta_type(self):
-        return 'database'
+    @staticmethod
+    def ContinuousEllipse(width, height, exponent):
+        return Bubble(width, height, exponent, Bubble._SHAPE_ELLIPSE)
+
+    @staticmethod
+    def ContinuousRectangle(width, height, exponent):
+        return Bubble(width, height, exponent, Bubble._SHAPE_RECTANGLE)
+
+    # background = filterd_image    foreground = unfiltered_image
+    def apply(self, background, foreground, x, y):
+        left = x - self._width  // 2
+        top  = y - self._height // 2
+
+        if self._shape == self._SHAPE_ELLIPSE:
+            if self._exponent is None:
+                return Rust.bubble_ellipse(background, foreground, left, top, self._width, self._height)
+
+            return Rust.bubble_power_ellipse_interpolation(background, foreground, left, top, self._width, self._height, self._exponent)
+
+        elif self._shape == self._SHAPE_RECTANGLE:
+            if self._exponent is None:
+                return Rust.bubble_rectangle(background, foreground, left, top, self._width, self._height)
+
+            return Rust.bubble_power_rectangle_interpolation(background, foreground, left, top, self._width, self._height, self._exponent)
+
+        return None
 
 
 class TrialCase:
-    def __init__(self, image = None, image_meta = None, filters = None, bubble = None):
-        self._image      = image
-        self._image_meta = image_meta
-        self._filters    = filters
-        self._bubble     = bubble
+    def __init__(self, image = None, image_filters = [], bubble = None):
+        self._image         = image
+        self._image_filters = image_filters
+        self._bubble        = bubble
 
     def image_get(self):
         return self._image
 
-    def image_set(self, image, meta):
-        self._image      = image
-        self._image_meta = meta
+    def image_set(self, image):
+        self._image = image
+
+    def image_filters_append(self, image_filter):
+        self._image_filters.append(image_filter)
+
+    def image_filters_pop(self):
+        if len(self._image_filters) != 0:
+            return self._image_filters.pop()
+
+        return False
+
+    def image_filters_clear(self):
+        self._image_filters = []
 
 
 class Trial:
@@ -61,13 +101,55 @@ class Trial:
         return False
 
     def image_get(self, index):
-        return self._cases[index].get_image()
+        return self._cases[index].image_get()
 
-    def image_set(self, index, image, meta):
-        self._cases[index].image_set(image, meta)
+    def image_set(self, index, image):
+        self._cases[index].image_set(image)
 
     def empty(self):
         return len(self._cases) == 0
+
+    def insert(self, index, case):
+        if self.index_valid(index):
+            self._cases.insert(index, case)
+            return True
+
+        if index == len(self):
+            self.append(case)
+            return True
+
+        print(f'{index=} {len(self)=}')
+
+        return False
+
+    def remove(self, index):
+        if self.index_valid(index):
+            self._cases.pop(index)
+            return True
+
+        return False
+
+    def image_filter_append(self, index, image_filter):
+        if self.index_valid(index):
+            self._cases[index].image_filters_append(image_filter)
+            return True
+
+        return False
+
+    def image_filter_pop(self, index):
+        if self.index_valid(index) and len(self) != 0:
+            return self._cases[index].image_filters_pop()
+
+        return None
+
+    def image_filter_clear(self, index):
+        if self.index_valid(index):
+            self._cases[index].image_filters_clear()
+            return True
+
+        return False
+
+    def save_to_database(self):
 
     def __len__(self):
         return len(self._cases)
@@ -88,6 +170,7 @@ class BubbleViewTrialTool(BubbleViewTool):
     def __init__(self, win, frame, config, **kwargs):
         self._on_back_callback = kwargs.get('on_back_callback', None)
         self._trial            = kwargs.get('trial', Trial())
+        self._trial_case_index = None if self._trial.empty() else 0
 
         # gui style
         self._padding_horizontal             = self._DEFAULT_PADDING_HORIZONTAL
@@ -109,6 +192,9 @@ class BubbleViewTrialTool(BubbleViewTool):
         self._menu_bar_write_frame         = None
         self._menu_bar_nav_index_spinbox   = None
 
+        # display image widgets
+        self._display_image_canvas = None
+
         # vars
         self._menu_bar_nav_index_var                = tk.StringVar(value = '')
         self._menu_bar_filter_choice_var            = tk.StringVar(value = '')
@@ -121,7 +207,23 @@ class BubbleViewTrialTool(BubbleViewTool):
         self._menu_bar_bubble_height_var            = tk.StringVar(value = '')
         self._menu_bar_bubble_exponent_var          = tk.StringVar(value = '')
 
+        # flags
+        self._display_image_resize = True
+
+        # images
+        self._display_image       = None
+        self._display_image_photo = None
+
+        # display image misc
+        self._display_image_resize_ratio  = None
+        self._display_image_stacks        = {}
+
+        # bubble
+        self._bubbles = {}
+
         super().__init__(win, frame)
+
+        self.frame.bind('<Configure>', self._frame_configure)
 
     # GUI
     def _padding_kwargs(self, hscale = 1, vscale = 1):
@@ -172,33 +274,13 @@ class BubbleViewTrialTool(BubbleViewTool):
         delete_button.configure(width = self._text_widget_width)
         delete_button.grid(column = 0, row = 1, **self._padding_kwargs(), **self._margin_kwargs())
 
-        self._menu_bar_nav_index_spinbox = tk.Spinbox(self._menu_bar_nav_frame, from_ = 0, to = len(self._trial),
+        self._menu_bar_nav_index_spinbox = tk.Spinbox(self._menu_bar_nav_frame, from_ = 1, to = max(1, len(self._trial)),
                                                       textvariable = self._menu_bar_nav_index_var,
-                                                      command = self._menu_bar_nav_index_spinbox_change)
+                                                      command = self._menu_bar_nav_index_spinbox_change,
+                                                      state = 'readonly')
         self._menu_bar_nav_index_spinbox.configure(width = self._text_widget_width)
         self._menu_bar_nav_index_spinbox.grid(column = 1, row = 0,
                                               **self._padding_kwargs(), **self._margin_kwargs())
-
-    def _init_menu_bar_load_frame(self):
-        if self._menu_bar_frame is None:
-            return
-
-        if self._menu_bar_load_frame is not None:
-            self._menu_bar_load_frame.destroy()
-
-        self._menu_bar_load_frame = tk.Frame(self._menu_bar_frame, bg = self._menu_bar_frame['bg'])
-        self._menu_bar_load_frame.grid(column = 2, row = 0, sticky = 'n',
-                                       **self._margin_kwargs(self._horizontal_frame_margin_scalar))
-
-        local_button = tk.Button(self._menu_bar_load_frame, text = 'Lokal',
-                                 command = self._menu_bar_load_local_button_click)
-        local_button.configure(width = self._text_widget_width)
-        local_button.grid(column = 0, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
-
-        database_button = tk.Button(self._menu_bar_load_frame, text = 'Datenbank',
-                                    command = self._menu_bar_load_database_button_click)
-        database_button.configure(width = self._text_widget_width)
-        database_button.grid(column = 0, row = 1, **self._padding_kwargs(), **self._margin_kwargs())
 
     def _init_menu_bar_filter_choice_frame(self):
         if self._menu_bar_frame is None:
@@ -379,16 +461,6 @@ class BubbleViewTrialTool(BubbleViewTool):
         save_button.configure(width = self._text_widget_width)
         save_button.grid(column = 0, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
 
-        delete_button = tk.Button(self._menu_bar_write_frame, text = 'Löschen',
-                                  command = self._menu_bar_write_delete_button_click)
-        delete_button.configure(width = self._text_widget_width)
-        delete_button.grid(column = 1, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
-
-        copy_button = tk.Button(self._menu_bar_write_frame, text = 'Kopieren',
-                                command = self._menu_bar_write_copy_button_click)
-        copy_button.configure(width = self._text_widget_width)
-        copy_button.grid(column = 0, row = 1, **self._padding_kwargs(), **self._margin_kwargs())
-
     def _init_menu_bar_frame(self):
         if self._menu_bar_frame is not None:
             self._menu_bar_frame.destroy()
@@ -398,68 +470,318 @@ class BubbleViewTrialTool(BubbleViewTool):
 
         self._init_menu_bar_back_button()
         self._init_menu_bar_nav_frame()
-        self._init_menu_bar_load_frame()
         self._init_menu_bar_filter_choice_frame()
         self._init_menu_bar_filter_input_frame()
         self._init_menu_bar_bubble_choice_frame()
         self._init_menu_bar_bubble_input_frame()
         self._init_menu_bar_write_frame()
 
+    def _display_image_set(self, image):
+        self._display_image = image
+
+        if self._display_image is None:
+            if self._display_image_canvas is None:
+                return
+
+            self._display_image_canvas.destroy()
+            self._display_image_canvas = None
+            return
+
+        x = self._margin_horizontal * self._horizontal_frame_margin_scalar
+        y = self._margin_vertical + self._menu_bar_frame.winfo_height()
+
+        width  = image.width
+        height = image.height
+
+        if self._display_image_resize:
+            window_width  = self.win.winfo_width()
+            window_height = self.win.winfo_height()
+
+            max_width  = window_width - 2 * self._margin_horizontal * self._horizontal_frame_margin_scalar
+            max_height = window_height - y - self._margin_vertical * 2
+
+            width_ratio  = max_width  / width
+            height_ratio = max_height / height
+
+            min_ratio = min(width_ratio, height_ratio)
+
+            if min_ratio < 1:
+                width  = round(width  * min_ratio)
+                height = round(height * min_ratio)
+
+                self._display_image_resize_ratio = min_ratio
+                image = image.resize((width, height))
+
+            else:
+                self._display_image_resize_ratio = None
+
+        self._display_image_photo = ImageTk.PhotoImage(image)
+
+        if self._display_image_canvas is None:
+            self._display_image_canvas = tk.Canvas(self.frame, bd = 0, highlightthickness = 0)
+            self._display_image_canvas.bind('<Button-1>', self._display_image_canvas_click)
+
+        self._display_image_canvas.place(x = x, y = y, width = width, height = height)
+        self._display_image_canvas.create_image(0, 0, anchor = tk.NW, image = self._display_image_photo)
+
+    def _load_active_trial_case(self):
+        if not self._trial.index_valid(self._trial_case_index):
+            self._menu_bar_nav_index_var.set('-')
+            self._menu_bar_nav_index_spinbox.configure(to = 1)
+            self._display_image_set(None)
+            return
+
+        self._menu_bar_nav_index_var.set(f'{self._trial_case_index + 1}')
+        self._menu_bar_nav_index_spinbox.configure(to = len(self._trial))
+
+        image = self._display_image_stacks_get_last()
+        if image is None:
+            image = self._trial.image_get(self._trial_case_index)
+
+        self._display_image_set(image)
+
     def drawView(self):
         self._init_menu_bar_frame()
+        self._load_active_trial_case()
 
     # Events
+    def _frame_configure(self, event):
+        if self._display_image_resize:
+            self._display_image_set(self._display_image)
+
     def _menu_bar_nav_new_button_click(self):
-        pass
+        file = fd.askopenfilename()
+        if file:
+            try:
+                # TODO: PIL.Image.tobytes() funktioniert nicht richtig bei PNG's (wird aber von ImageFilter benötigt)
+                image = Image.open(file)
+                image.save('bubble_view_temp.bmp')
+
+                image = Image.open('bubble_view_temp.bmp')
+                image.load()
+
+                if os.path.exists('bubble_view_temp.bmp'):
+                    os.remove('bubble_view_temp.bmp')
+
+                index = len(self._trial) if self._trial_case_index is None else self._trial_case_index + 1
+
+                if self._trial.insert(index, TrialCase(image = image)):
+                    self._trial_case_index_set(index)
+
+            except IOError:
+                messagebox.showinfo('Fehler', f'Keine Bilddatei: {file}')
 
     def _menu_bar_nav_delete_button_click(self):
-        pass
-
-    def _menu_bar_nav_prev_button_click(self):
-        pass
-
-    def _menu_bar_nav_next_button_click(self):
-        pass
+        if self._trial.remove(self._trial_case_index):
+            self._load_active_trial_case()
 
     def _menu_bar_nav_index_spinbox_change(self):
-        pass
+        try:
+            index = int(self._menu_bar_nav_index_var.get()) - 1
+            self._trial_case_index_set(index)
 
-    def _menu_bar_load_local_button_click(self):
-        pass
-
-    def _menu_bar_load_database_button_click(self):
-        pass
+        except Exception as e:
+            print(f'{e=}')
 
     def _menu_bar_filter_choice_combobox_changed(self, event):
         self._init_menu_bar_filter_choice_frame()
         self._init_menu_bar_filter_input_frame()
 
     def _menu_bar_filter_choice_apply_button_click(self):
-        pass
+        image_filter = None
+        try:
+            filter_choice = self._menu_bar_filter_choice_var.get()
+
+            if filter_choice == 'Box Blur':
+                radius     = int(self._menu_bar_filter_box_radius_var.get())
+                iterations = int(self._menu_bar_filter_box_iterations_var.get())
+
+                if radius < 0 or iterations < 0:
+                    raise Exception(f'Box Blur: radius={radius}; iterations={iterations};')
+
+                image_filter = ImageFilter.BoxBlur(radius, iterations)
+
+            elif filter_choice == 'Gaussian Blur':
+                radius = int(self._menu_bar_filter_gauss_radius_var.get())
+
+                if radius < 0:
+                    raise Exception(f'Gaussian Blur: radius={radius};')
+
+                image_filter = ImageFilter.GaussianBlur(radius)
+
+            elif filter_choice == 'Pixelate':
+                diameter = int(self._menu_bar_filter_pixelate_diameter_var.get())
+
+                if diameter < 0:
+                    raise Exception(f'Pixelate: diameter={diameter}')
+
+                image_filter = ImageFilter.PixelateSquare(diameter)
+
+        except Exception as e:
+            tk.messagebox.showinfo(f'{e}')
+
+        if image_filter is not None:
+            self._display_image_apply_image_filter(image_filter)
 
     def _menu_bar_filter_choice_reverse_button_click(self):
-        pass
+        self._display_image_remove_last_filter()
 
     def _menu_bar_bubble_choice_combobox_changed(self, event):
         self._init_menu_bar_bubble_choice_frame()
         self._init_menu_bar_bubble_input_frame()
 
     def _menu_bar_bubble_choice_apply_button_click(self):
-        pass
+        # choices = ['Ellipse - Diskret', 'Ellipse - Stetig', 'Rechteck - Diskret', 'Rechteck - Stetig']
+        bubble = None
+        try:
+            bubble_choice = self._menu_bar_bubble_choice_var.get()
+
+            width  = int(self._menu_bar_bubble_width_var.get())
+            height = int(self._menu_bar_bubble_height_var.get())
+
+            if bubble_choice == 'Ellipse - Diskret':
+                if width < 0 or height < 0:
+                    raise Exception(f'Ellipse - Diskret: width={width}; height={height};')
+
+                bubble = Bubble.DiscreteEllipse(width, height)
+
+            elif bubble_choice == 'Rechteck - Diskret':
+                if width < 0 or height < 0:
+                    raise Exception(f'Rechteck - Diskret: width={width}; height={height};')
+
+                bubble = Bubble.DiscreteRectangle(width, height)
+
+            elif bubble_choice == 'Ellipse - Stetig':
+                exponent = float(self._menu_bar_bubble_exponent_var.get())
+
+                if width < 0 or height < 0 or exponent < 0:
+                    raise Exception(f'Ellipse - Stetig: width={width}; height={height}; exponent={exponent};')
+
+                bubble = Bubble.ContinuousEllipse(width, height, exponent)
+
+            elif bubble_choice == 'Rechteck - Stetig':
+                exponent = float(self._menu_bar_bubble_exponent_var.get())
+
+                if width < 0 or height < 0 or exponent < 0:
+                    raise Exception(f'Rechteck - Stetig: width={width}; height={height}; exponent={exponent};')
+
+                bubble = Bubble.ContinuousRectangle(width, height, exponent)
+
+        except Exception as e:
+            tk.messagebox.showinfo(f'{e}')
+
+        if bubble is not None and self._trial_case_index is not None:
+            self._bubbles[self._trial_case_index] = bubble
 
     def _menu_bar_write_save_button_click(self):
         pass
 
-    def _menu_bar_write_delete_button_click(self):
-        pass
+    def _display_image_canvas_click(self, event):
+        if self._trial.index_valid(self._trial_case_index):
+            bubble = self._bubbles.get(self._trial_case_index, None)
 
-    def _menu_bar_write_copy_button_click(self):
-        pass
+            if bubble is not None:
+                foreground = self._trial.image_get(self._trial_case_index)
+                background = self._display_image_stacks_get_last()
 
-        # class BubbleViewTool(Tool):
+                if foreground is None or background is None:
+                    return
+
+                image = bubble.apply(background, foreground, event.x, event.y)
+                self._display_image_set(image)
+
+    # Misc
+    def _trial_case_index_set(self, index):
+        if index is None:
+            self._trial_case_index = None
+        else:
+            self._trial_case_index = max(0, min(index, len(self._trial) - 1))
+
+        self._load_active_trial_case()
+
+    def _display_image_stacks_append(self, image):
+        if not self._trial.index_valid(self._trial_case_index):
+            return False
+
+        if image is None:
+            return False
+
+        if self._trial_case_index not in self._display_image_stacks:
+            self._display_image_stacks[self._trial_case_index] = []
+
+        self._display_image_stacks[self._trial_case_index].append(image)
+        return True
+
+    def _display_image_stacks_pop(self):
+        if not self._trial.index_valid(self._trial_case_index):
+            return None
+
+        if self._trial_case_index not in self._display_image_stacks:
+            return None
+
+        stack = self._display_image_stacks[self._trial_case_index]
+        if len(stack) == 0:
+            return None
+
+        return stack.pop()
+
+    def _display_image_stacks_get_last(self):
+        if not self._trial.index_valid(self._trial_case_index):
+            return None
+
+        if self._trial_case_index not in self._display_image_stacks:
+            return None
+
+        stack = self._display_image_stacks[self._trial_case_index]
+        if len(stack) == 0:
+            return None
+
+        return stack[-1]
+
+    def _display_image_stacks_clear(self):
+        self._display_image_stacks.pop(self._trial_case_index)
+
+    def _display_image_apply_image_filter(self, image_filter):
+        if not self._trial.index_valid(self._trial_case_index):
+            return False
+
+        image = self._display_image_stacks_get_last()
+        if image is None:
+            image = self._trial.image_get(self._trial_case_index)
+
+        filtered_image = image_filter.apply(image)
+        if self._display_image_stacks_append(filtered_image):
+            self._trial.image_filter_append(self._trial_case_index, image_filter)
+            self._display_image_set(filtered_image)
+            return True
+
+        return False
+
+    def _display_image_remove_last_filter(self):
+        if not self._trial.index_valid(self._trial_case_index):
+            return False
+
+        image_filter = self._display_image_stacks_pop()
+        if image_filter is None:
+            return False
+
+        trial_image_filter = self._trial.image_filter_pop(self._trial_case_index)
+        if trial_image_filter is None:
+            message = 'Error: Image filter out of sync. Resetting image.'
+            tk.messagebox.showinfo(message)
+
+            self._trial.image_filter_clear(self._trial_case_index)
+            self._display_image_stacks_clear()
+            self._load_active_trial_case()
+
+        image = self._display_image_stacks_get_last()
+        if image is None:
+            image = self._trial.image_get(self._trial_case_index)
+
+        self._display_image_set(image)
 
 
-#
+
 #     # Defaults
 #     _DEFAULT_MENU_BAR_WIDGET_WIDTH  = 80
 #     _DEFAULT_MENU_BAR_WIDGET_HEIGHT = 30
