@@ -3,16 +3,795 @@ import tkinter.ttk as tkk
 import os
 import math
 
-
+from abc     import ABC, abstractmethod
 from timeit  import default_timer as timer
 from PIL     import Image, ImageTk, ImageDraw
 from tkinter import filedialog as fd, messagebox
-
 
 from Rust import Rust
 
 from ImageFilter import ImageFilter
 from Tool        import Tool
+
+
+class ImageMetaLocal:
+    def __init__(self):
+        pass
+
+    def meta_type(self):
+        return 'local'
+
+
+class ImageMetaDatabase:
+    def __init__(self, id):
+        self._id = id
+
+    def meta_type(self):
+        return 'database'
+
+
+class TrialCase:
+    def __init__(self, image = None, image_meta = None, filters = None, bubble = None):
+        self._image      = image
+        self._image_meta = image_meta
+        self._filters    = filters
+        self._bubble     = bubble
+
+    def image_get(self):
+        return self._image
+
+    def image_set(self, image, meta):
+        self._image      = image
+        self._image_meta = meta
+
+
+class Trial:
+    def __init__(self):
+        self._cases = []
+
+    def append(self, case):
+        self._cases.append(case)
+
+        return len(self._cases) - 1
+
+    def index_valid(self, index):
+        if index is not None and index < len(self._cases):
+            return True
+
+        return False
+
+    def image_get(self, index):
+        return self._cases[index].get_image()
+
+    def image_set(self, index, image, meta):
+        self._cases[index].image_set(image, meta)
+
+    def empty(self):
+        return len(self._cases) == 0
+
+    def __len__(self):
+        return len(self._cases)
+
+
+class BubbleViewTool(Tool):
+    pass 
+
+
+class BubbleViewTrialTool(BubbleViewTool):
+    _DEFAULT_PADDING_HORIZONTAL             = 5
+    _DEFAULT_PADDING_VERTICAL               = 5
+    _DEFAULT_MARGIN_HORIZONTAL              = 3
+    _DEFAULT_MARGIN_VERTICAL                = 3
+    _DEFAULT_HORIZONTAL_FRAME_MARGIN_SCALAR = 4
+    _DEFAULT_TEXT_WIDGET_WIDTH              = 8
+
+    def __init__(self, win, frame, config, **kwargs):
+        self._on_back_callback = kwargs.get('on_back_callback', None)
+        self._trial            = kwargs.get('trial', Trial())
+
+        # gui style
+        self._padding_horizontal             = self._DEFAULT_PADDING_HORIZONTAL
+        self._padding_vertical               = self._DEFAULT_PADDING_VERTICAL
+        self._margin_horizontal              = self._DEFAULT_MARGIN_HORIZONTAL
+        self._margin_vertical                = self._DEFAULT_MARGIN_VERTICAL
+        self._horizontal_frame_margin_scalar = self._DEFAULT_HORIZONTAL_FRAME_MARGIN_SCALAR
+        self._text_widget_width              = self._DEFAULT_TEXT_WIDGET_WIDTH
+
+        # menu bar widgets
+        self._menu_bar_frame               = None
+        self._menu_bar_back_frame          = None
+        self._menu_bar_load_frame          = None
+        self._menu_bar_nav_frame           = None
+        self._menu_bar_filter_choice_frame = None
+        self._menu_bar_filter_input_frame  = None
+        self._menu_bar_bubble_choice_frame = None
+        self._menu_bar_bubble_input_frame  = None
+        self._menu_bar_write_frame         = None
+        self._menu_bar_nav_index_spinbox   = None
+
+        # vars
+        self._menu_bar_nav_index_var                = tk.StringVar(value = '')
+        self._menu_bar_filter_choice_var            = tk.StringVar(value = '')
+        self._menu_bar_filter_box_radius_var        = tk.StringVar(value = '')
+        self._menu_bar_filter_box_iterations_var    = tk.StringVar(value = '')
+        self._menu_bar_filter_gauss_radius_var      = tk.StringVar(value = '')
+        self._menu_bar_filter_pixelate_diameter_var = tk.StringVar(value = '')
+        self._menu_bar_bubble_choice_var            = tk.StringVar(value = '')
+        self._menu_bar_bubble_width_var             = tk.StringVar(value = '')
+        self._menu_bar_bubble_height_var            = tk.StringVar(value = '')
+        self._menu_bar_bubble_exponent_var          = tk.StringVar(value = '')
+
+        super().__init__(win, frame)
+
+    # GUI
+    def _padding_kwargs(self, hscale = 1, vscale = 1):
+        return {
+            'ipadx': self._padding_horizontal * hscale,
+            'ipady': self._padding_vertical * vscale
+        }
+
+    def _margin_kwargs(self, hscale = 1, vscale = 1):
+        return {
+            'padx': self._margin_horizontal * hscale,
+            'pady': self._margin_vertical * vscale
+        }
+
+    def _init_menu_bar_back_button(self):
+        if self._menu_bar_frame is None:
+            return
+
+        if self._menu_bar_back_frame is not None:
+            self._menu_bar_back_frame.destroy()
+
+        self._menu_bar_back_frame = tk.Frame(self._menu_bar_frame, bg = self._menu_bar_frame['bg'])
+        self._menu_bar_back_frame.grid(column = 0, row = 0, sticky = 'n',
+                                       **self._margin_kwargs(self._horizontal_frame_margin_scalar))
+
+        self._menu_bar_back_button = tk.Button(self._menu_bar_back_frame, text = 'Zurück',
+                                               command = self._on_back_callback)
+        self._menu_bar_back_button.configure(width = self._text_widget_width)
+        self._menu_bar_back_button.grid(column = 0, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
+    def _init_menu_bar_nav_frame(self):
+        if self._menu_bar_frame is None:
+            return
+
+        if self._menu_bar_nav_frame is not None:
+            self._menu_bar_nav_frame.destroy()
+
+        self._menu_bar_nav_frame = tk.Frame(self._menu_bar_frame, bg = self._menu_bar_frame['bg'])
+        self._menu_bar_nav_frame.grid(column = 1, row = 0, sticky = 'n',
+                                      **self._margin_kwargs(self._horizontal_frame_margin_scalar))
+
+        new_button = tk.Button(self._menu_bar_nav_frame, text = 'Neu', command = self._menu_bar_nav_new_button_click)
+        new_button.configure(width = self._text_widget_width)
+        new_button.grid(column = 0, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
+        delete_button = tk.Button(self._menu_bar_nav_frame, text = 'Löschen',
+                                  command = self._menu_bar_nav_delete_button_click)
+        delete_button.configure(width = self._text_widget_width)
+        delete_button.grid(column = 0, row = 1, **self._padding_kwargs(), **self._margin_kwargs())
+
+        self._menu_bar_nav_index_spinbox = tk.Spinbox(self._menu_bar_nav_frame, from_ = 0, to = len(self._trial),
+                                                      textvariable = self._menu_bar_nav_index_var,
+                                                      command = self._menu_bar_nav_index_spinbox_change)
+        self._menu_bar_nav_index_spinbox.configure(width = self._text_widget_width)
+        self._menu_bar_nav_index_spinbox.grid(column = 1, row = 0,
+                                              **self._padding_kwargs(), **self._margin_kwargs())
+
+    def _init_menu_bar_load_frame(self):
+        if self._menu_bar_frame is None:
+            return
+
+        if self._menu_bar_load_frame is not None:
+            self._menu_bar_load_frame.destroy()
+
+        self._menu_bar_load_frame = tk.Frame(self._menu_bar_frame, bg = self._menu_bar_frame['bg'])
+        self._menu_bar_load_frame.grid(column = 2, row = 0, sticky = 'n',
+                                       **self._margin_kwargs(self._horizontal_frame_margin_scalar))
+
+        local_button = tk.Button(self._menu_bar_load_frame, text = 'Lokal',
+                                 command = self._menu_bar_load_local_button_click)
+        local_button.configure(width = self._text_widget_width)
+        local_button.grid(column = 0, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
+        database_button = tk.Button(self._menu_bar_load_frame, text = 'Datenbank',
+                                    command = self._menu_bar_load_database_button_click)
+        database_button.configure(width = self._text_widget_width)
+        database_button.grid(column = 0, row = 1, **self._padding_kwargs(), **self._margin_kwargs())
+
+    def _init_menu_bar_filter_choice_frame(self):
+        if self._menu_bar_frame is None:
+            return
+
+        if self._menu_bar_filter_choice_frame is not None:
+            self._menu_bar_filter_choice_frame.destroy()
+
+        self._menu_bar_filter_choice_frame = tk.Frame(self._menu_bar_frame, bg = self._menu_bar_frame['bg'])
+        self._menu_bar_filter_choice_frame.grid(column = 3, row = 0, sticky = 'n',
+                                                **self._margin_kwargs(self._horizontal_frame_margin_scalar))
+
+        choices = ['Box Blur', 'Gaussian Blur', 'Pixelate']
+        max_choice_len = max(len(c) for c in choices)
+
+        choice_label = tk.Label(self._menu_bar_filter_choice_frame, text = 'Filter')
+        choice_label.configure(width = 8)
+        choice_label.grid(column = 0, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
+        choice_combobox = tkk.Combobox(self._menu_bar_filter_choice_frame,
+                                       textvariable = self._menu_bar_filter_choice_var,
+                                       values = choices,
+                                       state = 'readonly')
+        choice_combobox.bind('<<ComboboxSelected>>', self._menu_bar_filter_choice_combobox_changed)
+        choice_combobox.configure(width = max_choice_len)
+        choice_combobox.grid(column = 1, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
+        choice = self._menu_bar_filter_choice_var.get()
+        if choice in choices:
+            reverse_button = tk.Button(self._menu_bar_filter_choice_frame, text = 'Rückgängig',
+                                       command = self._menu_bar_filter_choice_reverse_button_click)
+            reverse_button.configure(width = self._text_widget_width)
+            reverse_button.grid(column = 0, row = 1, **self._padding_kwargs(), **self._margin_kwargs())
+
+            apply_button = tk.Button(self._menu_bar_filter_choice_frame, text = 'Anwenden',
+                                         command = self._menu_bar_filter_choice_apply_button_click)
+            apply_button.configure(width = max_choice_len)
+            apply_button.grid(column = 1, row = 1, **self._padding_kwargs(), **self._margin_kwargs())
+
+    def _init_menu_bar_filter_input_frame(self):
+        if self._menu_bar_frame is None:
+            return
+
+        if self._menu_bar_filter_input_frame is not None:
+            self._menu_bar_filter_input_frame.destroy()
+
+        choice = self._menu_bar_filter_choice_var.get()
+
+        self._menu_bar_filter_input_frame = tk.Frame(self._menu_bar_frame, bg = self._menu_bar_frame['bg'])
+        self._menu_bar_filter_input_frame.grid(column = 4, row = 0, sticky ='n',
+                                               **self._margin_kwargs(self._horizontal_frame_margin_scalar))
+
+        if 'Box Blur' == choice:
+            radius_label = tk.Label(self._menu_bar_filter_input_frame, text ='Radius')
+            radius_label.configure(width = self._text_widget_width)
+            radius_label.grid(column = 0, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
+            radius_entry = tk.Entry(self._menu_bar_filter_input_frame, textvariable = self._menu_bar_filter_box_radius_var)
+            radius_entry.configure(width = self._text_widget_width)
+            radius_entry.grid(column = 1, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
+            iterations_label = tk.Label(self._menu_bar_filter_input_frame, text ='Iterationen')
+            iterations_label.configure(width = self._text_widget_width)
+            iterations_label.grid(column = 0, row = 1, **self._padding_kwargs(), **self._margin_kwargs())
+
+            iterations_entry = tk.Entry(self._menu_bar_filter_input_frame, textvariable = self._menu_bar_filter_box_iterations_var)
+            iterations_entry.configure(width = self._text_widget_width)
+            iterations_entry.grid(column = 1, row = 1, **self._padding_kwargs(), **self._margin_kwargs())
+
+        elif 'Gaussian Blur' == choice:
+            radius_label = tk.Label(self._menu_bar_filter_input_frame, text ='Radius')
+            radius_label.configure(width = self._text_widget_width)
+            radius_label.grid(column = 0, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
+            radius_entry = tk.Entry(self._menu_bar_filter_input_frame, textvariable = self._menu_bar_filter_gauss_radius_var)
+            radius_entry.configure(width = self._text_widget_width)
+            radius_entry.grid(column = 1, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
+        elif 'Pixelate' == choice:
+            diameter_label = tk.Label(self._menu_bar_filter_input_frame, text = 'Größe')
+            diameter_label.configure(width = self._text_widget_width)
+            diameter_label.grid(column = 0, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
+            diameter_entry = tk.Entry(self._menu_bar_filter_input_frame,
+                                      textvariable = self._menu_bar_filter_pixelate_diameter_var)
+            diameter_entry.configure(width = self._text_widget_width)
+            diameter_entry.grid(column = 1, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
+    def _init_menu_bar_bubble_choice_frame(self):
+        if self._menu_bar_frame is None:
+            return
+
+        if self._menu_bar_bubble_choice_frame is not None:
+            self._menu_bar_bubble_choice_frame.destroy()
+
+        self._menu_bar_bubble_choice_frame = tk.Frame(self._menu_bar_frame, bg = self._menu_bar_frame['bg'])
+        self._menu_bar_bubble_choice_frame.grid(column = 5, row = 0, sticky = 'n',
+                                                **self._margin_kwargs(self._horizontal_frame_margin_scalar))
+
+        choice = self._menu_bar_bubble_choice_var.get()
+        choices = ['Ellipse - Diskret', 'Ellipse - Stetig', 'Rechteck - Diskret', 'Rechteck - Stetig']
+        max_choice_len = max(len(c) for c in choices)
+
+        choice_label = tk.Label(self._menu_bar_bubble_choice_frame, text = 'Bubble')
+        choice_label.configure(width = self._text_widget_width)
+        choice_label.grid(column = 0, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
+        choice_combobox = tkk.Combobox(self._menu_bar_bubble_choice_frame,
+                                       textvariable = self._menu_bar_bubble_choice_var,
+                                       values = choices,
+                                       state = 'readonly')
+        choice_combobox.bind('<<ComboboxSelected>>', self._menu_bar_bubble_choice_combobox_changed)
+        choice_combobox.configure(width = max_choice_len)
+        choice_combobox.grid(column = 1, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
+        if choice in choices:
+            apply_button = tk.Button(self._menu_bar_bubble_choice_frame, text = 'Anwenden',
+                                     command = self._menu_bar_bubble_choice_apply_button_click)
+            apply_button.configure(width = max_choice_len)
+            apply_button.grid(column = 1, row = 1, **self._padding_kwargs(), **self._margin_kwargs())
+
+    def _init_menu_bar_bubble_input_frame(self):
+        if self._menu_bar_frame is None:
+            return
+
+        if self._menu_bar_bubble_input_frame is not None:
+            self._menu_bar_bubble_input_frame.destroy()
+
+        choices = ['Ellipse - Diskret', 'Ellipse - Stetig', 'Rechteck - Diskret', 'Rechteck - Stetig']
+        choice = self._menu_bar_bubble_choice_var.get()
+        if choice not in choices:
+            return
+
+        self._menu_bar_bubble_input_frame = tk.Frame(self._menu_bar_frame, bg = self._menu_bar_frame['bg'])
+        self._menu_bar_bubble_input_frame.grid(column = 6, row = 0, sticky = 'n',
+                                               **self._margin_kwargs(self._horizontal_frame_margin_scalar))
+
+        width_label = tk.Label(self._menu_bar_bubble_input_frame, text = 'Breite')
+        width_label.configure(width = self._text_widget_width)
+        width_label.grid(column = 0, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
+        width_entry = tk.Entry(self._menu_bar_bubble_input_frame, textvariable = self._menu_bar_bubble_width_var)
+        width_entry.configure(width = self._text_widget_width)
+        width_entry.grid(column = 1, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
+        height_label = tk.Label(self._menu_bar_bubble_input_frame, text = 'Höhe')
+        height_label.configure(width = self._text_widget_width)
+        height_label.grid(column = 0, row = 1, **self._padding_kwargs(), **self._margin_kwargs())
+
+        height_entry = tk.Entry(self._menu_bar_bubble_input_frame, textvariable = self._menu_bar_bubble_height_var)
+        height_entry.configure(width = self._text_widget_width)
+        height_entry.grid(column = 1, row = 1, **self._padding_kwargs(), **self._margin_kwargs())
+
+        continuous_choices = ['Ellipse - Stetig', 'Rechteck - Stetig']
+        if choice in continuous_choices:
+            exponent_label = tk.Label(self._menu_bar_bubble_input_frame, text = 'Exponent')
+            exponent_label.configure(width = self._text_widget_width)
+            exponent_label.grid(column = 2, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
+            exponent_entry = tk.Entry(self._menu_bar_bubble_input_frame,
+                                      textvariable = self._menu_bar_bubble_exponent_var)
+            exponent_entry.configure(width = self._text_widget_width)
+            exponent_entry.grid(column = 3, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
+    def _init_menu_bar_write_frame(self):
+        if self._menu_bar_frame is None:
+            return
+
+        if self._menu_bar_write_frame is not None:
+            self._menu_bar_write_frame.destroy()
+
+        self._menu_bar_write_frame = tk.Frame(self._menu_bar_frame, bg = self._menu_bar_frame['bg'])
+        self._menu_bar_write_frame.grid(column = 7, row = 0, sticky = 'n',
+                                        **self._margin_kwargs(self._horizontal_frame_margin_scalar))
+
+        save_button = tk.Button(self._menu_bar_write_frame, text = 'Speichern',
+                                command = self._menu_bar_write_save_button_click)
+        save_button.configure(width = self._text_widget_width)
+        save_button.grid(column = 0, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
+        delete_button = tk.Button(self._menu_bar_write_frame, text = 'Löschen',
+                                  command = self._menu_bar_write_delete_button_click)
+        delete_button.configure(width = self._text_widget_width)
+        delete_button.grid(column = 1, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
+        copy_button = tk.Button(self._menu_bar_write_frame, text = 'Kopieren',
+                                command = self._menu_bar_write_copy_button_click)
+        copy_button.configure(width = self._text_widget_width)
+        copy_button.grid(column = 0, row = 1, **self._padding_kwargs(), **self._margin_kwargs())
+
+    def _init_menu_bar_frame(self):
+        if self._menu_bar_frame is not None:
+            self._menu_bar_frame.destroy()
+
+        self._menu_bar_frame = tk.Frame(self.frame, bg = self.frame['bg'])
+        self._menu_bar_frame.place(x = 0, y = 0)
+
+        self._init_menu_bar_back_button()
+        self._init_menu_bar_nav_frame()
+        self._init_menu_bar_load_frame()
+        self._init_menu_bar_filter_choice_frame()
+        self._init_menu_bar_filter_input_frame()
+        self._init_menu_bar_bubble_choice_frame()
+        self._init_menu_bar_bubble_input_frame()
+        self._init_menu_bar_write_frame()
+
+    def drawView(self):
+        self._init_menu_bar_frame()
+
+    # Events
+    def _menu_bar_nav_new_button_click(self):
+        pass
+
+    def _menu_bar_nav_delete_button_click(self):
+        pass
+
+    def _menu_bar_nav_prev_button_click(self):
+        pass
+
+    def _menu_bar_nav_next_button_click(self):
+        pass
+
+    def _menu_bar_nav_index_spinbox_change(self):
+        pass
+
+    def _menu_bar_load_local_button_click(self):
+        pass
+
+    def _menu_bar_load_database_button_click(self):
+        pass
+
+    def _menu_bar_filter_choice_combobox_changed(self, event):
+        self._init_menu_bar_filter_choice_frame()
+        self._init_menu_bar_filter_input_frame()
+
+    def _menu_bar_filter_choice_apply_button_click(self):
+        pass
+
+    def _menu_bar_filter_choice_reverse_button_click(self):
+        pass
+
+    def _menu_bar_bubble_choice_combobox_changed(self, event):
+        self._init_menu_bar_bubble_choice_frame()
+        self._init_menu_bar_bubble_input_frame()
+
+    def _menu_bar_bubble_choice_apply_button_click(self):
+        pass
+
+    def _menu_bar_write_save_button_click(self):
+        pass
+
+    def _menu_bar_write_delete_button_click(self):
+        pass
+
+    def _menu_bar_write_copy_button_click(self):
+        pass
+
+        # class BubbleViewTool(Tool):
+#     # Defaults
+#     _DEFAULT_MENU_BAR_WIDGET_WIDTH  = 80
+#     _DEFAULT_MENU_BAR_WIDGET_HEIGHT = 30
+#     _DEFAULT_MENU_BAR_FRAME_SPACING = 30
+#     _DEFAULT_MARGIN_HORIZONTAL = 10
+#     _DEFAULT_MARGIN_VERTICAL   = 10
+#
+#     def __init__(self, win, frame, config, **kwargs):
+#         self._on_back_callback = kwargs.get('on_back_callback', None)
+#
+#         # Angezeigtes image
+#         self._display_image              = None
+#         self._display_image_canvas       = None
+#         # Scale display image mit window
+#         self._display_image_resize       = True
+#         self._display_image_resize_ratio = None
+#         # Photo image von display image für tkinter
+#         self._display_image_photo_image  = None
+#
+#         # Menu bar
+#         self._menu_bar_frames = []
+#         self._menu_bar_width  = 0
+#         self._menu_bar_height = 0
+#
+#         # Menu bar widgets
+#         self._menu_bar_widget_width  = self._DEFAULT_MENU_BAR_WIDGET_WIDTH
+#         self._menu_bar_widget_height = self._DEFAULT_MENU_BAR_WIDGET_HEIGHT
+#         self._menu_bar_frame_spacing = self._DEFAULT_MENU_BAR_FRAME_SPACING
+#
+#         # Margins
+#         self._margin_horizontal = self._DEFAULT_MARGIN_HORIZONTAL
+#         self._margin_vertical   = self._DEFAULT_MARGIN_VERTICAL
+#
+#         self._override_attributes_with_config(config)
+#
+#         super().__init__(win, frame)
+#
+#         # Event für resizing
+#         self.frame.bind('<Configure>', self._frame_configure)
+#
+#     def _override_attributes_with_config(self, config):
+#         pass
+#
+#     @abstractmethod
+#     def _create_menu_bar_frames_with_style(self):
+#         pass
+#
+#     def _create_menu_bar(self):
+#         for frame in self._menu_bar_frames:
+#             frame.destroy()
+#
+#         self._menu_bar_frames = []
+#         self._menu_bar_width   = 0
+#         self._menu_bar_height  = 0
+#
+#         for frame, style in self._create_menu_bar_frames_with_style():
+#             margin_horizontal = style.get('margin_horizontal', self._margin_horizontal)
+#             margin_vertical   = style.get('margin_vertical',   self._margin_vertical)
+#
+#             x = self._menu_bar_width + margin_horizontal
+#             y = margin_vertical
+#
+#             width  = style.get('width')
+#             height = style.get('height')
+#
+#             self._menu_bar_width  = x + width + self._menu_bar_frame_spacing
+#             self._menu_bar_height = max(self._menu_bar_height, height + y)
+#
+#             frame.place(x = x, y = y, width = width, height = height)
+#             self._menu_bar_frames.append(frame)
+#
+#     @abstractmethod
+#     def drawView(self):
+#         pass
+#
+#     def _display_image_set(self, image):
+#         self._display_image = image
+#
+#         if self._display_image is None:
+#             if self._display_image_canvas is None:
+#                 return
+#
+#             self._display_image_canvas.destroy()
+#             self._display_image_canvas = None
+#             return
+#
+#         x = self._margin_horizontal
+#         y = self._margin_vertical + self._menu_bar_height
+#
+#         width  = image.width
+#         height = image.height
+#
+#         if self._display_image_resize:
+#             window_width  = self.win.winfo_width()
+#             window_height = self.win.winfo_height()
+#
+#             max_width  = window_width - 2 * self._margin_horizontal
+#             max_height = window_height - y - self._margin_vertical
+#
+#             width_ratio  = max_width  / width
+#             height_ratio = max_height / height
+#
+#             min_ratio = min(width_ratio, height_ratio)
+#
+#             if min_ratio < 1:
+#                 width  = round(width  * min_ratio)
+#                 height = round(height * min_ratio)
+#
+#                 self._display_image_resize_ratio = min_ratio
+#                 image = image.resize((width, height))
+#
+#             else:
+#                 self._display_image_resize_ratio = None
+#
+#         self._display_image_photo_image = ImageTk.PhotoImage(image)
+#
+#         if self._display_image_canvas is None:
+#             self._display_image_canvas = tk.Canvas(self.frame, bd = 0, highlightthickness = 0)
+#
+#         self._display_image_canvas.place(x = x, y = y, width = width, height = height)
+#         self._display_image_canvas.create_image(0, 0, anchor = tk.NW, image = self._display_image_photo_image)
+#
+#     def _frame_configure(self, event):
+#         if self._display_image_resize:
+#             self._display_image_set(self._display_image)
+
+
+# class BubbleViewTrialTool(BubbleViewTool):
+#     def __init__(self, win, frame, config, trial = None, **kwargs):
+#         # Erzeugter trial
+#         self._trial = trial or Trial()
+#         self._trial_case_index = None if self._trial.empty() else 0
+#
+#         # Menu bar frames
+#         self._menu_bar_nav           = None
+#         self._menu_bar_load          = None
+#         self._menu_bar_filter_choice = None
+#         self._menu_bar_filter        = None
+#
+#         # Variables
+#         self._menu_bar_nav_index_var             = tk.StringVar(value = 'Test')
+#         self._menu_bar_filter_choice             = tk.StringVar(value = '')
+#         self._menu_bar_filter_box_radius_var     = tk.StringVar(value = '')
+#         self._menu_bar_filter_box_iterations_var = tk.StringVar(value = '')
+#
+#         super().__init__(win, frame, config, **kwargs)
+#
+#     def _trial_case_index_set(self, index):
+#         self._trial_case_index = min(max(0, index), len(self._trial) - 1)
+#         self.update_view()
+#
+#     def _menu_bar_nav_new_button_click(self):
+#         trial_case = TrialCase()
+#         self._trial_case_index_set(self._trial.append(trial_case))
+#
+#     def _menu_bar_nav_prev_button_click(self):
+#         if self._trial_case_index is not None:
+#             self._trial_case_index_set(self._trial_case_index - 1)
+#
+#     def _menu_bar_nav_next_button_click(self):
+#         if self._trial_case_index is not None:
+#             self._trial_case_index_set(self._trial_case_index + 1)
+#
+#     def _create_menu_bar_nav_frame_with_style(self):
+#         frame_width  = 2 * self._menu_bar_widget_width  + self._margin_horizontal
+#         frame_height = 2 * self._menu_bar_widget_height + self._margin_vertical
+#
+#         frame = tk.Frame(self.frame, bg = self.frame['bg'])
+#         frame_style = {
+#             'width':  frame_width,
+#             'height': frame_height,
+#         }
+#
+#         back_button = tk.Button(frame, text = 'Zurück', command = self._on_back_callback)
+#         new_button  = tk.Button(frame, text = 'Neu', command = self._menu_bar_nav_new_button_click)
+#         prev_button = tk.Button(frame, text = '<', command = self._menu_bar_nav_prev_button_click)
+#         index_label = tk.Label(frame, textvariable = self._menu_bar_nav_index_var)
+#         next_button = tk.Button(frame, text = '>', command = self._menu_bar_nav_next_button_click)
+#
+#         prev_next_width = (frame_width - 2 * self._margin_horizontal) / 4
+#         index_width     = 2 * prev_next_width
+#
+#         x = 0
+#         y = 0
+#         back_button.place(x = 0, y = 0, width = self._menu_bar_widget_width, height = self._menu_bar_widget_height)
+#
+#         x += self._menu_bar_widget_width + self._margin_horizontal
+#         new_button.place(x = x, y = y, width = self._menu_bar_widget_width, height = self._menu_bar_widget_height)
+#
+#         x = 0
+#         y = self._menu_bar_widget_height + self._margin_vertical
+#         prev_button.place(x = x, y = y, width = prev_next_width, height = self._menu_bar_widget_height)
+#
+#         x += prev_next_width + self._margin_horizontal
+#         index_label.place(x = x, y = y, width = index_width, height = self._menu_bar_widget_height)
+#
+#         x += index_width + self._margin_horizontal
+#         next_button.place(x = x, y = y, width = prev_next_width, height = self._menu_bar_widget_height)
+#
+#         return frame, frame_style
+#
+#     def _menu_bar_load_local_button_click(self):
+#         file = fd.askopenfilename()
+#         if file:
+#             try:
+#                 # TODO: PIL.Image.tobytes() funktioniert nicht richtig bei PNG's (wird aber von ImageFilter benötigt)
+#                 image = Image.open(file)
+#                 image.save('bubble_view_temp.bmp')
+#
+#                 image = Image.open('bubble_view_temp.bmp')
+#                 image.load()
+#
+#                 if os.path.exists('bubble_view_temp.bmp'):
+#                     os.remove('bubble_view_temp.bmp')
+#
+#                 if self._trial.index_valid(self._trial_case_index):
+#                     self._trial.image_set(self._trial_case_index, image, ImageMetaLocal())
+#                     self._display_image_set(image)
+#
+#             except IOError:
+#                 messagebox.showinfo('Fehler', f'Keine Bilddatei: {file}')
+#
+#     def _menu_bar_load_database_button_click(self):
+#         pass
+#
+#     def _create_menu_bar_load_frame_with_style(self):
+#         frame = tk.Frame(self.frame, bg = self.frame['bg'])
+#         frame_style = {
+#             'width': self._menu_bar_widget_width,
+#             'height': 2 * self._menu_bar_widget_height + self._margin_vertical
+#         }
+#
+#         local_button    = tk.Button(frame, text = 'Lokal', command = self._menu_bar_load_local_button_click)
+#         database_button = tk.Button(frame, text = 'Datenbank', command = self._menu_bar_load_database_button_click)
+#
+#         local_button.place(x = 0, y = 0, width = self._menu_bar_widget_width, height = self._menu_bar_widget_height)
+#         database_button.place(x = 0, y = self._menu_bar_widget_height + self._margin_vertical,
+#                               width = self._menu_bar_widget_width, height = self._menu_bar_widget_height)
+#
+#         return frame, frame_style
+#
+#     def _menu_bar_filter_combobox_changed(self, event):
+#         pass
+#
+#     def _create_menu_bar_filter_choice_frame_with_style(self):
+#         frame = tk.Frame(self.frame, bg = self.frame['bg'])
+#         frame_style = {
+#             'width':  self._menu_bar_widget_width * 2.5,
+#             'height': self._menu_bar_widget_height
+#         }
+#
+#         filter_label    = tk.Label(frame, text = 'Filter')
+#         filter_combobox = tkk.Combobox(frame, textvariable = self._menu_bar_filter_choice,
+#                                        values = ['Box Blur', 'Gaussian Blur', 'Pixelate'],
+#                                        state = 'readonly')
+#
+#         filter_combobox.bind('<<ComboboxSelected>>', self._menu_bar_filter_combobox_changed)
+#
+#         x = 0
+#         y = 0
+#         filter_label.place(x = x, y = y, width = self._menu_bar_widget_width, height = self._menu_bar_widget_height)
+#
+#         x += self._menu_bar_widget_width
+#         filter_combobox.place(x = x, y = y,
+#                               width = self._menu_bar_widget_width * 1.5, height = self._menu_bar_widget_height)
+#
+#         return frame, frame_style
+#
+#     def _create_menu_bar_filter_box_frame_with_style(self):
+#         frame = tk.Frame(self.frame, bg = self.frame['bg'])
+#         frame_style = {
+#             'width':  self._menu_bar_widget_width * 2,
+#             'height': self._menu_bar_widget_height * 2 + self._margin_vertical,
+#         }
+#
+#         radius_label = tk.Label(frame, text = 'Radius')
+#         radius_entry = tk.Entry(frame, textvariable = self._menu_bar_filter_box_radius_var)
+#
+#         iterations_label = tk.Label(frame, text = 'Iterationen')
+#         iterations_entry = tk.Entry(frame, textvariable = self._menu_bar_filter_box_iterations_var)
+#
+#         x = 0
+#         y = 0
+#         radius_label.place(x = x, y = y, width = self._menu_bar_widget_width, height = self._menu_bar_widget_height)
+#
+#         x += self._menu_bar_widget_width
+#         radius_entry.place(x = x, y = y, width = self._menu_bar_widget_width, height = self._menu_bar_widget_height)
+#
+#         x = 0
+#         y += self._menu_bar_widget_height + self._margin_vertical
+#         iterations_label.place(x = x, y = y, width = self._menu_bar_widget_width, height = self._menu_bar_widget_height)
+#
+#         x += self._menu_bar_widget_width
+#         iterations_entry.place(x = x, y = y, width = self._menu_bar_widget_width, height = self._menu_bar_widget_height)
+#
+#         return frame, frame_style
+#
+#     def _create_menu_bar_frames_with_style(self):
+#         frames_with_style = []
+#
+#         menu_bar_nav = self._create_menu_bar_nav_frame_with_style()
+#         menu_bar_load = self._create_menu_bar_load_frame_with_style()
+#         menu_bar_filter_choice = self._create_menu_bar_filter_choice_frame_with_style()
+#
+#         menu_bar_filter = None
+#         if self._menu_bar_filter_choice == 'Box Blur':
+#             menu_bar_filter = self._create_menu_bar_filter_box_frame_with_style()
+#         elif self._menu_bar_filter_choice == 'Gaussian Blur':
+#             menu_bar_filter = self._create_menu_bar_filter_gauss_frame_with_style()
+#         elif self._menu_bar_filter_choice == 'Pixelate':
+#             menu_bar_filter = self._create_menu_bar_filter_pixelate_frame_with_style()
+#
+#         frames_with_style.extend([menu_bar_nav, menu_bar_load, menu_bar_filter_choice])
+#
+#         if menu_bar_filter is not None:
+#             frames_with_style.append(menu_bar_filter)
+#
+#         self._menu_bar_nav  = menu_bar_nav[0]
+#         self._menu_bar_load = menu_bar_load[0]
+#         self._menu_bar_filter_choice = menu_bar_filter_choice[0]
+#         self._menu_bar_filter = menu_bar_filter[0] if menu_bar_filter is not None else None
+#
+#         return frames_with_style
+#
+#     def update_view(self):
+#         if self._trial.index_valid(self._trial_case_index):
+#             self._menu_bar_nav_index_var.set(f'{self._trial_case_index + 1} / {len(self._trial)}')
+#         else:
+#             self._menu_bar_nav_index_var.set('- / -')
+#
+#
+#     def drawView(self):
+#         self._menu_bar_nav_index_var.set('- / -')
+#         self._create_menu_bar()
+#         self.update_view()
 
 
 class BubbleViewStudy(Tool):
@@ -32,7 +811,7 @@ class BubbleViewStudy(Tool):
         self.slider_resolution = 0.05
         self.analyse_render_motion_width = 3
         self.analyse_render_motion_color = 'green'
-        self.analyse_render_click_outline_with  = 2
+        self.analyse_render_click_outline_with = 2
         self.analyse_render_click_outline_color = 'red'
         self.analyse_render_click_fill_color = (75, 75, 75, 75)
 
@@ -522,12 +1301,6 @@ class BubbleViewTrial(Tool):
 
             widget.place(x = x, y = y, width = width, height = height)
             self.menu_bar.append(widget)
-
-    # def export_button_click(self):
-    #     image = self.filter_image()
-    #
-    #     if image is not None:
-    #         image.save('export.jpg')
 
     def frame_configure(self, event):
         if self.display_image() is not None and self.display_image_resize:
