@@ -2,6 +2,7 @@ import tkinter     as tk
 import tkinter.ttk as tkk
 import os
 import math
+import json
 
 from timeit  import default_timer as timer
 from PIL     import Image, ImageTk, ImageDraw
@@ -12,6 +13,16 @@ import database
 from Rust import Rust
 from ImageFilter import ImageFilter
 from Tool import Tool
+
+
+# BUGS
+# can't add new images after deleting when no images
+# load last filter when editing
+# load bubble when editing
+# scale bubbles properly
+
+
+_TRIAL_CACHE = {}
 
 
 class Bubble:
@@ -59,11 +70,14 @@ class Bubble:
 
         return None
 
+    def to_json(self):
+        return f'{{ "shape": "{self._shape}", "width": {self._width}, "height": {self._height}, "exponent": {self._exponent} }}'
+
 
 class TrialCase:
-    def __init__(self, image = None, image_filters = [], bubble = None):
+    def __init__(self, image = None, image_filters = None, bubble = None):
         self._image         = image
-        self._image_filters = image_filters
+        self._image_filters = [] if image_filters is None else image_filters
         self._bubble        = bubble
 
     def image_get(self):
@@ -83,6 +97,20 @@ class TrialCase:
 
     def image_filters_clear(self):
         self._image_filters = []
+
+    def bubble_set(self, bubble):
+        self._bubble = bubble
+
+    def filters_to_json(self):
+        filters_json = [f.to_json() for f in self._image_filters]
+
+        return f'[{", ".join(filters_json)}]'
+
+    def bubble_to_json(self):
+        if self._bubble is None:
+            return "null"
+
+        return self._bubble.to_json()
 
 
 class Trial:
@@ -149,29 +177,77 @@ class Trial:
 
         return False
 
-    def save_to_database(self):
-        pass
+    def bubble_set(self, index, bubble):
+        if self.index_valid(index):
+            self._cases[index].bubble_set(bubble)
+            return True
+
+        return False
+
+    def _database_meta_data(self, trial_name, case_index):
+        trial_id = self._get_next_trial_id()
+        image_id = case_index
+        study_id = 0
+
+        return f'{{ "trial_id": {trial_id}, "trial_name": "{trial_name}", "image_id": {image_id}, "study_id": {study_id} }}'
+
+    def _get_next_trial_id(self):
+        max_trial_id = 0
+
+        for case in database.getBubbleView():
+            geometry = case[6]
+            geometry_json = json.loads(geometry)
+
+            meta = geometry_json['meta']
+            trial_id = int(meta['trial_id'])
+
+            max_trial_id = max(trial_id, max_trial_id)
+
+        return max_trial_id
+
+    def save_to_database(self, name):
+        for index, case in enumerate(self._cases):
+            image_path = 'temp_trial_case_image.bmp'
+            image_file = open(image_path, 'wb')
+            image = case.image_get()
+            image.save(image_file, 'BMP')
+
+            # wait until file is written
+            image_file.flush()
+            os.fsync(image_file)
+            image_file.close()
+
+            image_filters_json = case.filters_to_json()
+            bubble_json        = case.bubble_to_json()
+            meta_json          = self._database_meta_data(name, index)
+
+            geometry_json = f'{{ "meta": {meta_json}, "bubble": {bubble_json} }}'
+
+            print(f'filter:\n{image_filters_json}')
+            print(f'geometry:\n{geometry_json}')
+
+            # database.saveBubbleView(image_path, [], [], [], image_filters_json, geometry_json)
+
+            os.remove(image_path)
+
+    def save_to_cache(self, name):
+        _TRIAL_CACHE[name] = self
 
     def __len__(self):
         return len(self._cases)
 
 
 class BubbleViewTool(Tool):
-    pass 
-
-
-class BubbleViewTrialTool(BubbleViewTool):
     _DEFAULT_PADDING_HORIZONTAL             = 5
     _DEFAULT_PADDING_VERTICAL               = 5
     _DEFAULT_MARGIN_HORIZONTAL              = 3
     _DEFAULT_MARGIN_VERTICAL                = 3
     _DEFAULT_HORIZONTAL_FRAME_MARGIN_SCALAR = 4
+    _DEFAULT_VERTICAL_FRAME_MARGIN_SCALAR   = 2
     _DEFAULT_TEXT_WIDGET_WIDTH              = 8
 
-    def __init__(self, win, frame, config, **kwargs):
-        self._on_back_callback = kwargs.get('on_back_callback', None)
-        self._trial            = kwargs.get('trial', Trial())
-        self._trial_case_index = None if self._trial.empty() else 0
+    def __init__(self, win, frame, config):
+        self.config = config
 
         # gui style
         self._padding_horizontal             = self._DEFAULT_PADDING_HORIZONTAL
@@ -179,7 +255,129 @@ class BubbleViewTrialTool(BubbleViewTool):
         self._margin_horizontal              = self._DEFAULT_MARGIN_HORIZONTAL
         self._margin_vertical                = self._DEFAULT_MARGIN_VERTICAL
         self._horizontal_frame_margin_scalar = self._DEFAULT_HORIZONTAL_FRAME_MARGIN_SCALAR
+        self._vertical_frame_margin_scalar   = self._DEFAULT_VERTICAL_FRAME_MARGIN_SCALAR
         self._text_widget_width              = self._DEFAULT_TEXT_WIDGET_WIDTH
+
+        super().__init__(win, frame)
+
+    def drawView(self):
+        pass
+
+    def _padding_kwargs(self, hscale = 1, vscale = 1):
+            return {
+                'ipadx': self._padding_horizontal * hscale,
+                'ipady': self._padding_vertical * vscale
+            }
+
+    def _margin_kwargs(self, hscale = 1, vscale = 1):
+        return {
+            'padx': self._margin_horizontal * hscale,
+            'pady': self._margin_vertical * vscale
+        }
+
+
+class BubbleViewSelectTool(BubbleViewTool):
+    def __init__(self, win, frame, config, **kwargs):
+        self._on_back_callback = kwargs.get('on_back_callback', None)
+
+        # frames
+        self._back_frame  = None
+        self._trial_frame = None
+
+        # vars
+        self._trial_select_var = tk.StringVar(value = '')
+
+        super().__init__(win, frame, config)
+
+    @staticmethod
+    def _all_trial_choices():
+        return [name for name in _TRIAL_CACHE]
+
+    def _init_back_frame(self):
+        self._back_frame = tk.Frame(self.frame, bg = self.frame['bg'])
+        self._back_frame.grid(column = 0, row = 0, sticky = 'w',
+                              **self._margin_kwargs(1, self._vertical_frame_margin_scalar))
+
+        self._back_button = tk.Button(self._back_frame, text = 'Zurück', command = self._on_back_callback)
+        self._back_button.configure(width = self._text_widget_width)
+        self._back_button.grid(column = 0, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
+    def _init_trial_frame(self):
+        self._trial_frame = tk.Frame(self.frame, bg = self.frame['bg'])
+        self._trial_frame.grid(column = 0, row = 1, sticky = 'w',
+                               **self._margin_kwargs(1, self._vertical_frame_margin_scalar))
+
+        choices = self._all_trial_choices()
+
+        select_trial_combobox = tkk.Combobox(self._trial_frame, textvariable = self._trial_select_var,
+                                             values = choices,
+                                             state = 'readonly')
+        select_trial_combobox.configure(width = self._text_widget_width * 3)
+        select_trial_combobox.grid(column = 0, row = 0, columnspan = 2, **self._padding_kwargs(), **self._margin_kwargs())
+
+        new_trial_button = tk.Button(self._trial_frame, text = 'Neu', command = self._trial_new_button_click)
+        new_trial_button.configure(width = self._text_widget_width)
+        new_trial_button.grid(column = 0, row = 1, **self._padding_kwargs(), **self._margin_kwargs())
+
+        edit_trial_button = tk.Button(self._trial_frame, text = 'Edit', command = self._trial_edit_button_click)
+        edit_trial_button.configure(width = self._text_widget_width)
+        edit_trial_button.grid(column = 1, row = 1, **self._padding_kwargs(), **self._margin_kwargs())
+
+        study_trial_button = tk.Button(self._trial_frame, text = 'Studie', command = self._trial_study_button_click)
+        study_trial_button.configure(width = self._text_widget_width)
+        study_trial_button.grid(column = 0, row = 2, **self._padding_kwargs(), **self._margin_kwargs())
+
+        analyse_trial_button = tk.Button(self._trial_frame, text = 'Analyse', command = self._trial_analyse_button_click)
+        analyse_trial_button.configure(width = self._text_widget_width)
+        analyse_trial_button.grid(column = 1, row = 2, **self._padding_kwargs(), **self._margin_kwargs())
+
+    def drawView(self):
+        self._init_back_frame()
+        self._init_trial_frame()
+
+    # Events
+    def _trial_new_button_click(self):
+        for child in self.frame.winfo_children():
+            child.destroy()
+
+        def on_back_callback():
+            for child in self.frame.winfo_children():
+                child.destroy()
+
+            BubbleViewSelectTool(self.win, self.frame, self.config, on_back_callback = self._on_back_callback)
+
+        BubbleViewTrialTool(self.win, self.frame, self.config, on_back_callback = on_back_callback)
+
+    def _trial_edit_button_click(self):
+        trial_choice = self._trial_select_var.get()
+
+        trial = _TRIAL_CACHE.get(trial_choice, None)
+
+        if trial is not None:
+            for child in self.frame.winfo_children():
+                child.destroy()
+
+            def on_back_callback():
+                for child in self.frame.winfo_children():
+                    child.destroy()
+
+                BubbleViewSelectTool(self.win, self.frame, self.config, on_back_callback = self._on_back_callback)
+
+            BubbleViewTrialTool(self.win, self.frame, self.config, trial = trial, on_back_callback = on_back_callback)
+
+
+    def _trial_study_button_click(self):
+        pass
+
+    def _trial_analyse_button_click(self):
+        pass
+
+
+class BubbleViewTrialTool(BubbleViewTool):
+    def __init__(self, win, frame, config, **kwargs):
+        self._on_back_callback = kwargs.get('on_back_callback', None)
+        self._trial            = kwargs.get('trial', Trial())
+        self._trial_case_index = None if self._trial.empty() else 0
 
         # menu bar widgets
         self._menu_bar_frame               = None
@@ -207,6 +405,7 @@ class BubbleViewTrialTool(BubbleViewTool):
         self._menu_bar_bubble_width_var             = tk.StringVar(value = '')
         self._menu_bar_bubble_height_var            = tk.StringVar(value = '')
         self._menu_bar_bubble_exponent_var          = tk.StringVar(value = '')
+        self._menu_bar_write_save_var               = tk.StringVar(value = '')
 
         # flags
         self._display_image_resize = True
@@ -222,23 +421,13 @@ class BubbleViewTrialTool(BubbleViewTool):
         # bubble
         self._bubbles = {}
 
-        super().__init__(win, frame)
+        self._display_image_stacks_init()
+
+        super().__init__(win, frame, config)
 
         self.frame.bind('<Configure>', self._frame_configure)
 
     # GUI
-    def _padding_kwargs(self, hscale = 1, vscale = 1):
-        return {
-            'ipadx': self._padding_horizontal * hscale,
-            'ipady': self._padding_vertical * vscale
-        }
-
-    def _margin_kwargs(self, hscale = 1, vscale = 1):
-        return {
-            'padx': self._margin_horizontal * hscale,
-            'pady': self._margin_vertical * vscale
-        }
-
     def _init_menu_bar_back_button(self):
         if self._menu_bar_frame is None:
             return
@@ -460,7 +649,11 @@ class BubbleViewTrialTool(BubbleViewTool):
         save_button = tk.Button(self._menu_bar_write_frame, text = 'Speichern',
                                 command = self._menu_bar_write_save_button_click)
         save_button.configure(width = self._text_widget_width)
-        save_button.grid(column = 0, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+        save_button.grid(column = 0, row = 0, sticky = 'w', **self._padding_kwargs(), **self._margin_kwargs())
+
+        save_entry = tk.Entry(self._menu_bar_write_frame, textvariable = self._menu_bar_write_save_var)
+        save_entry.configure(width = self._text_widget_width * 3)
+        save_entry.grid(column = 1, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
 
     def _init_menu_bar_frame(self):
         if self._menu_bar_frame is not None:
@@ -671,11 +864,14 @@ class BubbleViewTrialTool(BubbleViewTool):
         except Exception as e:
             tk.messagebox.showinfo(f'{e}')
 
-        if bubble is not None and self._trial_case_index is not None:
+        if bubble is not None and self._trial.index_valid(self._trial_case_index) is not None:
             self._bubbles[self._trial_case_index] = bubble
+            self._trial.bubble_set(self._trial_case_index, bubble)
 
     def _menu_bar_write_save_button_click(self):
-        pass
+        save_name = self._menu_bar_write_save_var.get()
+        # self._trial.save_to_database('name')
+        self._trial.save_to_cache(save_name)
 
     def _display_image_canvas_click(self, event):
         if self._trial.index_valid(self._trial_case_index):
@@ -691,7 +887,7 @@ class BubbleViewTrialTool(BubbleViewTool):
                 image = bubble.apply(background, foreground, event.x, event.y)
                 self._display_image_set(image)
 
-    # Misc
+    # Utility
     def _trial_case_index_set(self, index):
         if index is None:
             self._trial_case_index = None
@@ -742,6 +938,22 @@ class BubbleViewTrialTool(BubbleViewTool):
     def _display_image_stacks_clear(self):
         self._display_image_stacks.pop(self._trial_case_index)
 
+    def _display_image_stacks_init(self):
+        if len(self._trial) == 0:
+            return
+
+        for index, case in enumerate(self._trial._cases):
+            stack = []
+            image = case._image
+            print(f'{index=}')
+
+            for image_filter in case._image_filters:
+                image = image_filter.apply(image)
+                stack.append(image)
+                print(f'{image_filter=}')
+
+            self._display_image_stacks[index] = stack
+
     def _display_image_apply_image_filter(self, image_filter):
         if not self._trial.index_valid(self._trial_case_index):
             return False
@@ -780,6 +992,7 @@ class BubbleViewTrialTool(BubbleViewTool):
             image = self._trial.image_get(self._trial_case_index)
 
         self._display_image_set(image)
+
 
 
 
