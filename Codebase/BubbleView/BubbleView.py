@@ -5,7 +5,7 @@ import math
 import json
 
 from timeit  import default_timer as timer
-from PIL     import Image, ImageTk, ImageDraw
+from PIL     import Image, ImageTk, ImageDraw, ImageColor
 from tkinter import filedialog as fd, messagebox
 
 import database
@@ -19,7 +19,6 @@ from Tool import Tool
 # can't add new images after deleting when no images
 # load last filter when editing
 # load bubble when editing
-# scale bubbles properly
 
 
 _TRIAL_CACHE = {}
@@ -298,10 +297,10 @@ class BubbleViewTool(Tool):
         pass
 
     def _padding_kwargs(self, hscale = 1, vscale = 1):
-            return {
-                'ipadx': self._padding_horizontal * hscale,
-                'ipady': self._padding_vertical * vscale
-            }
+        return {
+            'ipadx': self._padding_horizontal * hscale,
+            'ipady': self._padding_vertical * vscale
+        }
 
     def _margin_kwargs(self, hscale = 1, vscale = 1):
         return {
@@ -1318,6 +1317,12 @@ class BubbleViewAnalyseTool(BubbleViewTool):
         self._render_clicks_fill_color = (75, 75, 75, 75)
         self._render_clicks_outline_color = 'red'
         self._render_clicks_width = 2
+        self._render_heatmap_color = 'red'
+        self._render_heatmap_transparency = 0.5
+
+        # heatmap
+        self._heatmap_rel_horizontal_resolution = 20
+        self._heatmap_rel_vertical_resolution   = 20
 
         super().__init__(win, frame, config)
 
@@ -1331,12 +1336,21 @@ class BubbleViewAnalyseTool(BubbleViewTool):
         self._menu_bar_trial_nav_frame.grid(column = 0, row = 0, sticky = 'n',
                                             **self._margin_kwargs(self._horizontal_frame_margin_scalar))
 
+        trial_label = tk.Label(self._menu_bar_trial_nav_frame, text = 'Versuch')
+        trial_label.configure(width = self._text_widget_width)
+        trial_label.grid(column = 0, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
         trial_spinbox = tk.Spinbox(self._menu_bar_trial_nav_frame, from_ = 1, to = max(1, len(self._trial)),
                                    textvariable = self._menu_bar_trial_index_var,
                                    command = self._menu_bar_trial_index_spinbox_change,
                                    state = 'readonly')
         trial_spinbox.configure(width = self._text_widget_width)
-        trial_spinbox.grid(column = 0, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+        trial_spinbox.grid(column = 1, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
+        trial_heatmap_button = tk.Button(self._menu_bar_trial_nav_frame, text = 'Heatmap',
+                                         command = self._trial_heatmap_button_click)
+        trial_heatmap_button.configure(width = self._text_widget_width)
+        trial_heatmap_button.grid(column = 2, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
 
     def _init_menu_bar_study_nav_frame(self):
         if self._menu_bar_frame is None:
@@ -1346,12 +1360,21 @@ class BubbleViewAnalyseTool(BubbleViewTool):
         self._menu_bar_study_nav_frame.grid(column = 1, row = 0, sticky = 'n',
                                             **self._margin_kwargs(self._horizontal_frame_margin_scalar))
 
+        study_label = tk.Label(self._menu_bar_study_nav_frame, text = 'Studie')
+        study_label.configure(width = self._text_widget_width)
+        study_label.grid(column = 0, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
         study_spinbox = tk.Spinbox(self._menu_bar_study_nav_frame, from_ = 1, to = max(1, len(self._studies)),
                                    textvariable = self._menu_bar_study_index_var,
                                    command = self._menu_bar_study_index_spinbox_change,
                                    state = 'readonly')
         study_spinbox.configure(width = self._text_widget_width)
         study_spinbox.grid(column = 1, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
+
+        stduy_heatmap_button = tk.Button(self._menu_bar_study_nav_frame, text = 'Heatmap',
+                                         command = self._study_heatmap_button_click)
+        stduy_heatmap_button.configure(width = self._text_widget_width)
+        stduy_heatmap_button.grid(column = 2, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
 
     def _init_menu_bar_timeline_frame(self):
         if self._menu_bar_frame is None:
@@ -1447,6 +1470,19 @@ class BubbleViewAnalyseTool(BubbleViewTool):
         time = float(event)
         self._render_analyse_until(time)
 
+    def _trial_heatmap_button_click(self):
+        points = []
+        for study in self._studies:
+            points.extend([(x, y) for (x, y), _ in study._clicks[self._trial_case_index]])
+
+        self._render_heatmap(points)
+
+    def _study_heatmap_button_click(self):
+        study  = self._studies[self._study_index]
+        points = [(x, y) for (x, y), _ in study._clicks[self._trial_case_index]]
+
+        self._render_heatmap(points)
+
     # Misc
     def _trial_case_index_set(self, index):
         self._trial_case_index = index
@@ -1479,6 +1515,7 @@ class BubbleViewAnalyseTool(BubbleViewTool):
 
         return max_time
 
+    # Render
     def _render_analyse_until(self, time):
         motions = self._studies[self._study_index]._motions[self._trial_case_index]
         clicks  = self._studies[self._study_index]._clicks[self._trial_case_index]
@@ -1526,3 +1563,57 @@ class BubbleViewAnalyseTool(BubbleViewTool):
                                width = self._render_clicks_width)
 
         self._display_image_set(image)
+
+    def _render_heatmap(self, points):
+        if len(points) == 0:
+            return
+
+        rectangle_width, rectangle_height = self._display_image.size
+        rectangle_hits = {}
+
+        for i in range(self._heatmap_rel_horizontal_resolution):
+            left  = i * rectangle_width
+            right = (i + 1) * rectangle_width
+
+            for j in range(self._heatmap_rel_vertical_resolution):
+                top = j * rectangle_height
+                bot = (j + 1) * rectangle_height
+
+                for x, y in points:
+                    if left <= x < right and top <= y < bot:
+                        if (x, y) not in rectangle_hits:
+                            rectangle_hits[(x, y)] = 1
+                            continue
+
+                        rectangle_hits[(x, y)] += 1
+
+        max_hits = max(hits for _, hits in rectangle_hits.items())
+
+        mini_heatmap = Image.new('RGBA', (self._heatmap_rel_horizontal_resolution, self._heatmap_rel_vertical_resolution), self._render_heatmap_color)
+
+        for i in range(self._heatmap_rel_horizontal_resolution):
+            for j in range(self._heatmap_rel_vertical_resolution):
+                scalar = rectangle_hits.get((i, j), 0) / max_hits
+                r, g, b, *_ = mini_heatmap.getpixel((i, j))
+                alpha = scalar * 255 * self._render_heatmap_transparency
+                print(f'{alpha=}')
+                mini_heatmap.putpixel((i, j), (r, g, b, int(alpha)))
+
+        heatmap = mini_heatmap.resize(self._display_image.size, Image.NEAREST)
+
+        heatmap.show()
+
+        image   = self._source_image.copy()
+
+        for i in range(self._heatmap_rel_horizontal_resolution):
+            left  = i * rectangle_width
+            right = (i + 1) * rectangle_width
+
+            for j in range(self._heatmap_rel_vertical_resolution):
+                top = j * rectangle_height
+                bot = (j + 1) * rectangle_height
+
+                croped = heatmap.crop((left, top, right, bot))
+                image.paste(croped, (left, top, right, bot), croped)
+
+        image.show()
