@@ -8,6 +8,7 @@ import random
 import string
 import time
 
+import database
 from CodeChart.ImageExplorer import ImageExplorer
 from Config.Einstellungen.Wechselzeitdauer import Wechselzeitdauer
 from Config.Einstellungen.Stringordnung import Stringordnung
@@ -134,7 +135,9 @@ class CodeChart(Tool):
 
         # Open up the image selection display
         image_loader = ImageExplorer(self)
-        self.image_cache = image_loader.display()[0]
+        result = image_loader.display()
+        self.image_cache = result[0]
+        self.image_cache_path = result[1]
 
         # reshow the window
         self.win.deiconify()
@@ -222,7 +225,18 @@ class CodeChart(Tool):
                                          "Bitte überprüfen Sie ihre Eingabe!")
         else:
             print(index)
-            # TODO SAVE!
+
+            # Calculate
+            dimension = self.rastergroesse.getValue()
+            columns = dimension[0]
+            rows = dimension[1]
+            eye_x = (index[0] / columns) * self.IMAGE_WIDTH
+            eye_y = (index[1] / columns) * self.IMAGE_HEIGHT
+
+            # Save
+            database.saveCodeCharts(self.image_cache_path, {'x': eye_x}, {'y': eye_y})
+
+            # Return
             self.abort()
 
     # HELPER FUNCTIONS
