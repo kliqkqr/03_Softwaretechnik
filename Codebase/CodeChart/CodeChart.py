@@ -26,7 +26,7 @@ class CodeChart(Tool):
     THREAD_CYCLE_TIME = 300
 
     # Constants
-    DELTA_X = 50
+    DELTA_X = 0
     DELTA_Y = 50
     IMAGE_WIDTH = 800
     IMAGE_HEIGHT = 500
