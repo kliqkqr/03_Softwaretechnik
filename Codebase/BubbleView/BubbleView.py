@@ -5,7 +5,7 @@ import math
 import json
 
 from timeit  import default_timer as timer
-from PIL     import Image, ImageTk, ImageDraw, ImageColor
+from PIL     import Image, ImageTk, ImageDraw, ImageColor, ImageFilter as PILImageFilter
 from tkinter import filedialog as fd, messagebox
 
 import database
@@ -1284,6 +1284,7 @@ class BubbleViewAnalyseTool(BubbleViewTool):
 
         # widgets
         self._menu_bar_frame           = None
+        self._menu_bar_back_frame      = None
         self._menu_bar_trial_nav_frame = None
         self._menu_bar_study_nav_frame = None
         self._menu_bar_timeline_frame  = None
@@ -1318,22 +1319,34 @@ class BubbleViewAnalyseTool(BubbleViewTool):
         self._render_clicks_outline_color = 'red'
         self._render_clicks_width = 2
         self._render_heatmap_color = 'red'
-        self._render_heatmap_transparency = 0.5
+        self._render_heatmap_alpha_factor = 0.5
+        self._render_heatmap_alpha_exponent = 0.5
 
         # heatmap
         self._heatmap_rel_horizontal_resolution = 20
-        self._heatmap_rel_vertical_resolution   = 20
 
         super().__init__(win, frame, config)
 
         self.frame.bind('<Configure>', self._frame_configure)
+
+    def _init_menu_bar_back_frame(self):
+        if self._menu_bar_frame is None:
+            return
+
+        self._menu_bar_back_frame = tk.Frame(self._menu_bar_frame, bg = self._menu_bar_frame['bg'])
+        self._menu_bar_back_frame.grid(column = 0, row = 0, sticky = 'n',
+                                       **self._margin_kwargs(self._horizontal_frame_margin_scalar))
+
+        back_button = tk.Button(self._menu_bar_back_frame, text = 'Zurück', command = self._on_back_callback)
+        back_button.configure(width = self._text_widget_width)
+        back_button.grid(column = 0, row = 0, **self._padding_kwargs(), **self._margin_kwargs())
 
     def _init_menu_bar_trial_nav_frame(self):
         if self._menu_bar_frame is None:
             return
 
         self._menu_bar_trial_nav_frame = tk.Frame(self._menu_bar_frame, bg = self._menu_bar_frame['bg'])
-        self._menu_bar_trial_nav_frame.grid(column = 0, row = 0, sticky = 'n',
+        self._menu_bar_trial_nav_frame.grid(column = 1, row = 0, sticky = 'n',
                                             **self._margin_kwargs(self._horizontal_frame_margin_scalar))
 
         trial_label = tk.Label(self._menu_bar_trial_nav_frame, text = 'Versuch')
@@ -1357,7 +1370,7 @@ class BubbleViewAnalyseTool(BubbleViewTool):
             return
 
         self._menu_bar_study_nav_frame = tk.Frame(self._menu_bar_frame, bg = self._menu_bar_frame['bg'])
-        self._menu_bar_study_nav_frame.grid(column = 1, row = 0, sticky = 'n',
+        self._menu_bar_study_nav_frame.grid(column = 2, row = 0, sticky = 'n',
                                             **self._margin_kwargs(self._horizontal_frame_margin_scalar))
 
         study_label = tk.Label(self._menu_bar_study_nav_frame, text = 'Studie')
@@ -1381,7 +1394,7 @@ class BubbleViewAnalyseTool(BubbleViewTool):
             return
 
         self._menu_bar_timeline_frame = tk.Frame(self._menu_bar_frame, bg = self._menu_bar_frame['bg'])
-        self._menu_bar_timeline_frame.grid(column = 2, row = 0,
+        self._menu_bar_timeline_frame.grid(column = 3, row = 0,
                                            **self._margin_kwargs(self._horizontal_frame_margin_scalar))
 
         self._menu_bar_timeline_scale = tk.Scale(self._menu_bar_timeline_frame, from_ = 0, to = self._study_max_time(),
@@ -1396,6 +1409,7 @@ class BubbleViewAnalyseTool(BubbleViewTool):
         self._menu_bar_frame = tk.Frame(self.frame, bg = self.frame['bg'])
         self._menu_bar_frame.grid(column = 0, row = 0)
 
+        self._init_menu_bar_back_frame()
         self._init_menu_bar_trial_nav_frame()
         self._init_menu_bar_study_nav_frame()
         self._init_menu_bar_timeline_frame()
@@ -1486,12 +1500,15 @@ class BubbleViewAnalyseTool(BubbleViewTool):
     # Misc
     def _trial_case_index_set(self, index):
         self._trial_case_index = index
+        self._menu_bar_trial_index_var.set(index + 1)
 
         self._source_image = self._trial.image_get(self._trial_case_index)
         self._study_index_set(0)
 
     def _study_index_set(self, index):
         self._study_index = index
+        self._menu_bar_study_index_var.set(index + 1)
+
         self._menu_bar_timeline_var.set(0)
         self._menu_bar_timeline_scale.configure(to = self._study_max_time())
 
@@ -1568,52 +1585,45 @@ class BubbleViewAnalyseTool(BubbleViewTool):
         if len(points) == 0:
             return
 
-        rectangle_width, rectangle_height = self._display_image.size
+        self._menu_bar_timeline_var.set(0)
+
+        rectangle_width  = self._display_image.width  / self._heatmap_rel_horizontal_resolution
+        rel_vertical_resolution = round(self._display_image.height / rectangle_width)
+        rectangle_height = self._display_image.height / rel_vertical_resolution
+
         rectangle_hits = {}
 
         for i in range(self._heatmap_rel_horizontal_resolution):
             left  = i * rectangle_width
             right = (i + 1) * rectangle_width
 
-            for j in range(self._heatmap_rel_vertical_resolution):
+            for j in range(rel_vertical_resolution):
                 top = j * rectangle_height
                 bot = (j + 1) * rectangle_height
 
                 for x, y in points:
                     if left <= x < right and top <= y < bot:
-                        if (x, y) not in rectangle_hits:
-                            rectangle_hits[(x, y)] = 1
+                        if (i, j) not in rectangle_hits:
+                            rectangle_hits[(i, j)] = 1
                             continue
 
-                        rectangle_hits[(x, y)] += 1
+                        rectangle_hits[(i, j)] += 1
 
         max_hits = max(hits for _, hits in rectangle_hits.items())
 
-        mini_heatmap = Image.new('RGBA', (self._heatmap_rel_horizontal_resolution, self._heatmap_rel_vertical_resolution), self._render_heatmap_color)
+        mini_heatmap = Image.new('RGBA', (self._heatmap_rel_horizontal_resolution, rel_vertical_resolution), self._render_heatmap_color)
 
         for i in range(self._heatmap_rel_horizontal_resolution):
-            for j in range(self._heatmap_rel_vertical_resolution):
-                scalar = rectangle_hits.get((i, j), 0) / max_hits
+            for j in range(rel_vertical_resolution):
+                scalar = ((rectangle_hits.get((i, j), 0) / max_hits) ** self._render_heatmap_alpha_exponent) * self._render_heatmap_alpha_factor
                 r, g, b, *_ = mini_heatmap.getpixel((i, j))
-                alpha = scalar * 255 * self._render_heatmap_transparency
-                print(f'{alpha=}')
-                mini_heatmap.putpixel((i, j), (r, g, b, int(alpha)))
+                alpha = int(scalar * 255)
+                mini_heatmap.putpixel((i, j), (r, g, b, alpha))
 
         heatmap = mini_heatmap.resize(self._display_image.size, Image.NEAREST)
 
-        heatmap.show()
+        image = self._source_image.copy()
+        image.paste(heatmap, (0, 0, image.width, image.height), heatmap)
 
-        image   = self._source_image.copy()
+        self._display_image_set(image)
 
-        for i in range(self._heatmap_rel_horizontal_resolution):
-            left  = i * rectangle_width
-            right = (i + 1) * rectangle_width
-
-            for j in range(self._heatmap_rel_vertical_resolution):
-                top = j * rectangle_height
-                bot = (j + 1) * rectangle_height
-
-                croped = heatmap.crop((left, top, right, bot))
-                image.paste(croped, (left, top, right, bot), croped)
-
-        image.show()
