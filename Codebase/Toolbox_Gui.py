@@ -4,7 +4,7 @@ from tkinter import *
 from CodeChart.CodeChart import CodeChart
 from Config.ConfigFile import ConfigFile
 
-from BubbleView.BubbleView import BubbleViewTrialTool, BubbleViewSelectTool
+from BubbleView.BubbleView import BubbleViewSelectTool
 from EyeTracking.EyeTracking import EyeTracking
 from Datenanalyse.Datenanalyse import Datenanalyse
 

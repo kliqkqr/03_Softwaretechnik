@@ -11,8 +11,9 @@ class ImageFilter(abc.ABC):
     def apply(self, image):
         pass
 
+    @staticmethod
     @abc.abstractmethod
-    def name(self):
+    def name():
         pass
 
     @abc.abstractmethod
@@ -22,6 +23,21 @@ class ImageFilter(abc.ABC):
     @abc.abstractmethod
     def to_json(self):
         pass
+
+    @staticmethod
+    def from_dict(dictonary):
+        filter_name = dictonary.get('name', None)
+        if filter_name is None:
+            return None
+
+        if BoxBlur.name() == filter_name:
+            return BoxBlur.from_dict(dictonary)
+
+        elif GaussianBlur.name() == filter_name:
+            return GaussianBlur.from_dict(dictonary)
+
+        elif PixelateSquare.name() == filter_name:
+            return PixelateSquare.from_dict(dictonary)
 
 
 class BoxBlur(ImageFilter):
@@ -34,14 +50,25 @@ class BoxBlur(ImageFilter):
         threads = multiprocessing.cpu_count() if self.threads is None else self.threads
         return Rust.blur_box(image, self.radius, self.iterations, threads)
 
-    def name(self):
+    @staticmethod
+    def name():
         return 'BoxBlur'
 
     def copy(self):
         return BoxBlur(self.radius, self.iterations, self.threads)
 
     def to_json(self):
-        return f'{{ "name": "{self.name()}", "radius": {self.radius}, "iterations": {self.iterations} }}'
+        return f'{{ "name": "{BoxBlur.name()}", "radius": {self.radius}, "iterations": {self.iterations} }}'
+
+    @staticmethod
+    def from_dict(dictonary):
+        radius     = dictonary.get('radius', None)
+        iterations = dictonary.get('iterations', None)
+
+        if None in [radius, iterations]:
+            return None
+        
+        return BoxBlur(radius, iterations)
 
 
 class GaussianBlur(ImageFilter):
@@ -69,14 +96,25 @@ class GaussianBlur(ImageFilter):
         box_blur_filter = BoxBlur(box_radius, self.iterations, self.threads)
         return box_blur_filter.apply(image)
 
-    def name(self):
+    @staticmethod
+    def name():
         return 'GaussianBlur'
 
     def copy(self):
         return GaussianBlur(self.radius, self.iterations, self.threads)
 
     def to_json(self):
-        return f'{{ "name": "{self.name()}", "radius": {self.radius}, "iterations": {self.iterations} }}'
+        return f'{{ "name": "{GaussianBlur.name()}", "radius": {self.radius}, "iterations": {self.iterations} }}'
+
+    @staticmethod
+    def from_dict(dictonary):
+        radius     = dictonary.get('radius', None)
+        iterations = dictonary.get('iterations', None)
+
+        if None in [radius, iterations]:
+            return None
+
+        return GaussianBlur(radius, iterations)
 
 
 class PixelateSquare(ImageFilter):
@@ -87,11 +125,21 @@ class PixelateSquare(ImageFilter):
     def apply(self, image):
         return Rust.pixelate_square(image, self.diameter, self.threads)
 
-    def name(self):
+    @staticmethod
+    def name():
         return 'PixelateSquare'
 
     def copy(self):
         return PixelateSquare(self.diameter, self.threads)
 
     def to_json(self):
-        return f'{{ "name": "{self.name()}", "diameter": {self.diameter} }}'
+        return f'{{ "name": "{PixelateSquare.name()}", "diameter": {self.diameter} }}'
+
+    @staticmethod
+    def from_dict(dictonary):
+        diameter = dictonary.get('diameter', None)
+
+        if diameter is None:
+            return None
+
+        return PixelateSquare(diameter)

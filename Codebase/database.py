@@ -107,14 +107,25 @@ def getBubbleView():
         geometry_used = geometry_used.decode("utf-8")
 
         # convert strings to string arrays
-        array_x = string_x.split(",")
-        array_y = string_y.split(",")
-        array_time = string_time.split(",")
+        array_x = string_x.split(",") if string_x != '' else []
+        array_y = string_y.split(",") if string_y != '' else []
+        array_time = string_time.split(",") if string_time != '' else []
 
-        # convert string arrays to int or float arrays
-        eye_position_x = [int(array_x) for array_x in array_x]
-        eye_position_y = [int(array_y) for array_y in array_y]
-        timestamps = [float(array_time) for array_time in array_time]
+        try:
+            # convert string arrays to int or float arrays
+            eye_position_x = [int(array_x) for array_x in array_x]
+            eye_position_y = [int(array_y) for array_y in array_y]
+            timestamps = [float(array_time) for array_time in array_time]
+
+        except Exception as e:
+            print(f'{string_x=}')
+            print(f'{string_y=}')
+            print(f'{string_time=}')
+
+            print(f'{array_x=}')
+            print(f'{array_y=}')
+            print(f'{array_time=}')
+            raise e
 
         my_row = [id, image_data, eye_position_x, eye_position_y, timestamps, filter_used, geometry_used]
         result.append(my_row)
@@ -122,3 +133,18 @@ def getBubbleView():
         row = mycursor.fetchone()
     
     return result
+
+
+def resetBubbleView():
+    deleteBubbleView()
+    createBubbleView()
+
+def deleteBubbleView():
+    conn = mysql.connector.connect(host = "mysql.hrz.tu-chemnitz.de", user = "Eyetracking_GR03_rw", passwd = "Duciev4j", database="Eyetracking_GR03")
+    mycursor = conn.cursor()
+    mycursor.execute('DROP TABLE BubbleView;')
+
+def createBubbleView():
+    conn = mysql.connector.connect(host = "mysql.hrz.tu-chemnitz.de", user = "Eyetracking_GR03_rw", passwd = "Duciev4j", database="Eyetracking_GR03")
+    mycursor = conn.cursor()
+    mycursor.execute("CREATE TABLE IF NOT EXISTS BubbleView (id int NOT NULL PRIMARY KEY AUTO_INCREMENT, image LONGBLOB NOT NULL, eye_position_x JSON, eye_position_y JSON, timestamps JSON, filter_used JSON, geometry_used JSON)")

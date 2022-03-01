@@ -3,9 +3,10 @@ import tkinter.ttk as tkk
 import os
 import math
 import json
+import io
 
 from timeit  import default_timer as timer
-from PIL     import Image, ImageTk, ImageDraw, ImageColor, ImageFilter as PILImageFilter
+from PIL     import Image, ImageTk, ImageDraw
 from tkinter import filedialog as fd, messagebox
 
 import database
@@ -51,6 +52,30 @@ class Bubble:
     def ContinuousRectangle(width, height, exponent):
         return Bubble(width, height, exponent, Bubble._SHAPE_RECTANGLE)
 
+    @staticmethod
+    def from_dict(dictionary):
+        shape    = dictionary.get('shape', None)
+        width    = dictionary.get('width', None)
+        height   = dictionary.get('height', None)
+        exponent = dictionary.get('exponent', None)
+
+        if None in [shape, width, height, exponent]:
+            return None
+
+        if shape == Bubble._SHAPE_ELLIPSE:
+            if exponent == 'discrete':
+                return Bubble.DiscreteEllipse(width, height)
+
+            return Bubble.ContinuousEllipse(width, height, exponent)
+
+        elif shape == Bubble._SHAPE_RECTANGLE:
+            if exponent == 'discrete':
+                return Bubble.DiscreteRectangle(width, height)
+
+            return Bubble.ContinuousRectangle(width, height, exponent)
+
+        return None
+
     # background = filterd_image    foreground = unfiltered_image
     def apply(self, background, foreground, x, y):
         left = x - self._width  // 2
@@ -71,7 +96,8 @@ class Bubble:
         return None
 
     def to_json(self):
-        return f'{{ "shape": "{self._shape}", "width": {self._width}, "height": {self._height}, "exponent": {self._exponent} }}'
+        exponent = '"discrete"' if self._exponent is None else self._exponent
+        return f'{{ "shape": "{self._shape}", "width": {self._width}, "height": {self._height}, "exponent": {exponent} }}'
 
 
 class TrialCase:
@@ -124,8 +150,8 @@ class TrialCase:
 
 
 class Trial:
-    def __init__(self):
-        self._cases = []
+    def __init__(self, cases = None):
+        self._cases = [] if cases is None else cases
 
     def append(self, case):
         self._cases.append(case)
@@ -210,51 +236,171 @@ class Trial:
 
         return False
 
-    def _database_meta_data(self, trial_name, case_index):
-        trial_id = self._get_next_trial_id()
-        image_id = case_index
-        study_id = 0
+    # database
+    @staticmethod
+    def _database_meta_data(trial_id, trial_name, study_id, case_index):
+        return f'{{ "trial_id": {trial_id}, "trial_name": "{trial_name}", "study_id": {study_id}, "image_id": {case_index} }}'
 
-        return f'{{ "trial_id": {trial_id}, "trial_name": "{trial_name}", "image_id": {image_id}, "study_id": {study_id} }}'
-
-    def _get_next_trial_id(self):
-        max_trial_id = 0
-
-        for case in database.getBubbleView():
-            geometry = case[6]
+    @staticmethod
+    def _get_meta_from_query_result(result):
+        try:
+            geometry = result[6]
             geometry_json = json.loads(geometry)
 
-            meta = geometry_json['meta']
-            trial_id = int(meta['trial_id'])
+            return geometry_json.get('meta', None)
 
+        except:
+            return None
+
+    @staticmethod
+    def _get_bubble_dict_from_query_result(result):
+        try:
+            geometry = result[6]
+            geometry_json = json.loads(geometry)
+
+            return geometry_json.get('bubble', None)
+
+        except:
+            return None
+
+    @staticmethod
+    def _get_image_bytes_from_query_result(result):
+        return result[1]
+
+    @staticmethod
+    def _get_filter_dicts_from_query_result(result):
+        try:
+            filter_json = json.loads(result[5])
+            return filter_json
+
+        except:
+            return None
+
+    @staticmethod
+    def _get_values_from_meta(meta):
+        return [meta.get(key, None) for key in ['trial_id', 'trial_name', 'study_id', 'image_id']]
+
+    def _get_next_trial_id(self):
+        max_trial_id = -1
+
+        for result in database.getBubbleView():
+            meta = self._get_meta_from_query_result(result)
+            if meta is None:
+                continue
+
+            trial_id     = int(meta['trial_id'])
             max_trial_id = max(trial_id, max_trial_id)
 
-        return max_trial_id
+        return max_trial_id + 1
+
+    @staticmethod
+    def _create_temp_bitmap(image):
+        image_path = 'temp_trial_case_image.bmp'
+        image_file = open(image_path, 'wb')
+        image.save(image_file, 'BMP')
+
+        # wait until file is written
+        image_file.flush()
+        os.fsync(image_file)
+        image_file.close()
+
+        return image_path
 
     def save_to_database(self, name):
-        for index, case in enumerate(self._cases):
-            image_path = 'temp_trial_case_image.bmp'
-            image_file = open(image_path, 'wb')
-            image = case.image_get()
-            image.save(image_file, 'BMP')
+        _, trial = self.load_first_from_database(name)
+        if trial is not None:
+            return False
 
-            # wait until file is written
-            image_file.flush()
-            os.fsync(image_file)
-            image_file.close()
+        trial_id = self._get_next_trial_id()
+
+        for index, case in enumerate(self._cases):
+            image_path = Trial._create_temp_bitmap(case.image_get())
 
             image_filters_json = case.filters_to_json()
             bubble_json        = case.bubble_to_json()
-            meta_json          = self._database_meta_data(name, index)
+            meta_json          = Trial._database_meta_data(trial_id, name, 0, index)
+            geometry_json      = f'{{ "meta": {meta_json}, "bubble": {bubble_json} }}'
 
-            geometry_json = f'{{ "meta": {meta_json}, "bubble": {bubble_json} }}'
+            database.saveBubbleView(image_path, [], [], [], image_filters_json, geometry_json)
 
-            print(f'filter:\n{image_filters_json}')
-            print(f'geometry:\n{geometry_json}')
+        return True
 
-            # database.saveBubbleView(image_path, [], [], [], image_filters_json, geometry_json)
+    @staticmethod
+    def load_first_from_database(name):
+        cases   = {}
+        results = database.getBubbleView()
 
-            os.remove(image_path)
+        first_trial_id = None
+
+        for result in results:
+            meta = Trial._get_meta_from_query_result(result)
+            if meta is None:
+                continue
+
+            meta_values = Trial._get_values_from_meta(meta)
+            if None in meta_values:
+                continue
+
+            trial_id, trial_name, study_id, image_id = meta_values
+
+            first_trial_id = trial_id if first_trial_id is None else first_trial_id
+
+            if trial_name == name and study_id == 0:
+                try:
+                    image_bytes  = Trial._get_image_bytes_from_query_result(result)
+                    filter_dicts = Trial._get_filter_dicts_from_query_result(result)
+                    bubble_dict  = Trial._get_bubble_dict_from_query_result(result)
+
+                    image = Image.open(io.BytesIO(image_bytes))
+
+                    image_filters = []
+                    for filter_dict in filter_dicts:
+                        image_filter = ImageFilter.ImageFilter.from_dict(filter_dict)
+                        if image_filter is None:
+                            raise Exception(f'image_filter is None\n{filter_dict=}')
+
+                        image_filters.append(image_filter)
+
+                    bubble = Bubble.from_dict(bubble_dict)
+
+                    case = TrialCase(image, image_filters, bubble)
+                    cases[image_id] = case
+
+                except Exception as e:
+                    print(f'Trial.load_first_from_database: Exception\n{e}')
+
+        if len(cases) == 0:
+            return None, None
+
+        case_keys = set(cases.keys())
+        indecis   = set(range(len(cases)))
+
+        if case_keys != indecis:
+            print(f'Trial.load_first_from_database: incomplete case_keys={case_keys};')
+            return None, None
+
+        sorted_case_keys = list(case_keys)
+        sorted_case_keys.sort()
+
+        trial_cases = [cases[key] for key in sorted_case_keys]
+        return first_trial_id, Trial(trial_cases)
+
+    @staticmethod
+    def load_all_names():
+        names = set()
+
+        for result in database.getBubbleView():
+            meta = Trial._get_meta_from_query_result(result)
+            if meta is None:
+                continue
+
+            trial_name = meta.get('trial_name', None)
+            if trial_name is None:
+                continue
+
+            names.add(trial_name)
+
+        return list(names)
 
     def save_to_cache(self, name):
         _TRIAL_CACHE[name] = self
@@ -268,6 +414,122 @@ class Study:
         self._trial   = trial
         self._clicks  = clicks
         self._motions = motions
+
+    @staticmethod
+    def _get_next_study_id(trial_id):
+        max_study_id = 0
+
+        for result in database.getBubbleView():
+            meta = Trial._get_meta_from_query_result(result)
+            if meta is None:
+                continue
+
+            if trial_id == int(meta['trial_id']):
+                study_id     = int(meta['study_id'])
+                max_study_id = max(study_id, max_study_id)
+
+        return max_study_id + 1
+
+    def save_to_database(self, trial_name):
+        trial_id, trial = Trial.load_first_from_database(trial_name)
+
+        if trial_id is None or trial is None:
+            return False
+
+        study_id = Study._get_next_study_id(trial_id)
+
+        for index in range(len(self._trial)):
+            image = Image.new('RGB', (1, 1), 'black')
+            image_path = Trial._create_temp_bitmap(image)
+
+            x_coords = []
+            y_coords = []
+            times    = []
+
+            for (x, y), t in self._clicks[index]:
+                x_coords.append(x)
+                y_coords.append(y)
+                times.append(t)
+
+            for (x, y), t in self._motions[index]:
+                x_coords.append(-(x + 1))
+                y_coords.append(-(y + 1))
+                times.append(-(t + 1))
+
+            meta_json     = Trial._database_meta_data(trial_id, trial_name, study_id, index)
+            geometry_json = f'{{ "meta": {meta_json}, "bubble": null }}'
+
+            database.saveBubbleView(image_path, x_coords, y_coords, times, "", geometry_json)
+
+        return True
+
+    @staticmethod
+    def load_all_from_database(trial, trial_key):
+        clicks_dict  = {}
+        motions_dict = {}
+
+        results = database.getBubbleView()
+
+        for result in results:
+            meta = Trial._get_meta_from_query_result(result)
+            if meta is None:
+                continue
+
+            meta_values = Trial._get_values_from_meta(meta)
+            if None is meta_values:
+                continue
+
+            trial_id, trial_name, study_id, image_id = meta_values
+
+            if study_id == 0:
+                continue
+
+            if trial_name != trial_key:
+                continue
+
+            x_coords = result[2]
+            y_coords = result[3]
+            t_coords = result[4]
+
+            clicks  = []
+            motions = []
+
+            max_index = min(len(x_coords), len(y_coords), len(t_coords))
+            for index in range(max_index):
+                x = x_coords[index]
+                y = y_coords[index]
+                t = t_coords[index]
+
+                if x < 0:
+                    motions.append(((-x - 1, -y - 1), -t - 1))
+                    continue
+
+                clicks.append(((x, y), t))
+
+            study_index = study_id - 1
+
+            if study_index not in clicks_dict:
+                clicks_dict[study_index] = {}
+
+            if study_index not in motions_dict:
+                motions_dict[study_index] = {}
+
+            clicks_dict[study_index][image_id]  = clicks
+            motions_dict[study_index][image_id] = motions
+
+        studies = []
+
+        for study_index in range(len(clicks_dict)):
+            study_clicks  = clicks_dict[study_index]
+            study_motions = motions_dict[study_index]
+
+            clicks  = [study_clicks[image_index] for image_index in range(len(study_clicks))]
+            motions = [study_motions[image_index] for image_index in range(len(study_motions))]
+
+            study = Study(trial, clicks, motions)
+            studies.append(study)
+
+        return studies
 
 
 class BubbleViewTool(Tool):
@@ -322,9 +584,13 @@ class BubbleViewSelectTool(BubbleViewTool):
 
         super().__init__(win, frame, config)
 
+        self.win.state('normal')
+        self.win.geometry('400x400')
+
     @staticmethod
     def _all_trial_choices():
-        return [name for name in _TRIAL_CACHE]
+        # return [name for name in _TRIAL_CACHE]
+        return Trial.load_all_names()
 
     def _init_back_frame(self):
         self._back_frame = tk.Frame(self.frame, bg = self.frame['bg'])
@@ -384,7 +650,10 @@ class BubbleViewSelectTool(BubbleViewTool):
     def _trial_edit_button_click(self):
         trial_choice = self._trial_select_var.get()
 
-        trial = _TRIAL_CACHE.get(trial_choice, None)
+        # trial = _TRIAL_CACHE.get(trial_choice, None)
+        _, trial = Trial.load_first_from_database(trial_choice)
+        if trial is None:
+            return
 
         if trial is not None:
             for child in self.frame.winfo_children():
@@ -396,12 +665,14 @@ class BubbleViewSelectTool(BubbleViewTool):
 
                 BubbleViewSelectTool(self.win, self.frame, self.config, on_back_callback = self._on_back_callback)
 
-            BubbleViewTrialTool(self.win, self.frame, self.config, trial = trial, on_back_callback = on_back_callback)
+            BubbleViewTrialTool(self.win, self.frame, self.config, trial = trial, trial_name = trial_choice,
+                                on_back_callback = on_back_callback)
 
     def _trial_study_button_click(self):
         trial_choice = self._trial_select_var.get()
 
-        trial = _TRIAL_CACHE.get(trial_choice, None)
+        # trial = _TRIAL_CACHE.get(trial_choice, None)
+        trial_id, trial = Trial.load_first_from_database(trial_choice)
 
         if trial is not None:
             for child in self.frame.winfo_children():
@@ -419,7 +690,14 @@ class BubbleViewSelectTool(BubbleViewTool):
     def _trial_analyse_button_click(self):
         trial_choice = self._trial_select_var.get()
 
-        trial = _TRIAL_CACHE.get(trial_choice, None)
+        # trial = _TRIAL_CACHE.get(trial_choice, None)
+        trial_id, trial = Trial.load_first_from_database(trial_choice)
+        if trial is None:
+            return
+
+        studies = Study.load_all_from_database(trial, trial_choice)
+        if studies is None:
+            return
 
         if trial is not None:
             for child in self.frame.winfo_children():
@@ -432,7 +710,7 @@ class BubbleViewSelectTool(BubbleViewTool):
                 BubbleViewSelectTool(self.win, self.frame, self.config, on_back_callback = self._on_back_callback)
 
             BubbleViewAnalyseTool(self.win, self.frame, self.config, trial = trial, trial_key = trial_choice,
-                                  on_back_callback = on_back_callback)
+                                  studies = studies, on_back_callback = on_back_callback)
 
 
 class BubbleViewTrialTool(BubbleViewTool):
@@ -467,7 +745,7 @@ class BubbleViewTrialTool(BubbleViewTool):
         self._menu_bar_bubble_width_var             = tk.StringVar(value = '')
         self._menu_bar_bubble_height_var            = tk.StringVar(value = '')
         self._menu_bar_bubble_exponent_var          = tk.StringVar(value = '')
-        self._menu_bar_write_save_var               = tk.StringVar(value = '')
+        self._menu_bar_write_save_var               = tk.StringVar(value = kwargs.get('trial_name', ''))
 
         # flags
         self._display_image_resize = True
@@ -488,6 +766,8 @@ class BubbleViewTrialTool(BubbleViewTool):
         super().__init__(win, frame, config)
 
         self.frame.bind('<Configure>', self._frame_configure)
+
+        win.state('zoomed')
 
     # GUI
     def _init_menu_bar_back_button(self):
@@ -932,8 +1212,10 @@ class BubbleViewTrialTool(BubbleViewTool):
 
     def _menu_bar_write_save_button_click(self):
         save_name = self._menu_bar_write_save_var.get()
-        # self._trial.save_to_database('name')
-        self._trial.save_to_cache(save_name)
+        if not self._trial.save_to_database(save_name):
+            print(f'BubbleViewTrialTool._menu_bar_write_save_button_click: coudn\'t save do database')
+
+        # self._trial.save_to_cache(save_name)
 
     def _display_image_canvas_click(self, event):
         if self._trial.index_valid(self._trial_case_index):
@@ -1096,6 +1378,8 @@ class BubbleViewStudyTool(BubbleViewTool):
 
         self.frame.bind('<Configure>', self._frame_configure)
 
+        win.state('zoomed')
+
     # GUI
     def _init_menu_bar_back_frame(self):
         if self._menu_bar_frame is None:
@@ -1256,7 +1540,10 @@ class BubbleViewStudyTool(BubbleViewTool):
                 _STUDY_CACHE[self._trial_key] = []
 
             study = Study(self._trial, self._clicks, self._motions)
-            _STUDY_CACHE[self._trial_key].append(study)
+            # _STUDY_CACHE[self._trial_key].append(study)
+            if not study.save_to_database(self._trial_key):
+                print(f'BubbleViewStudyTool._next_image: coudn\'t save study')
+
             self._on_back_callback()
 
         self._trial_case_index += 1
@@ -1274,10 +1561,10 @@ class BubbleViewStudyTool(BubbleViewTool):
 
 
 class BubbleViewAnalyseTool(BubbleViewTool):
-    def __init__(self, win, frame, config, trial, trial_key, **kwargs):
+    def __init__(self, win, frame, config, trial, trial_key, studies, **kwargs):
         self._trial            = trial
         self._trial_case_index = 0 if len(trial) != 0 else None
-        self._studies          = _STUDY_CACHE.get(trial_key, [])
+        self._studies          = studies
         self._study_index      = 0
         self._trial_name       = trial_key
         self._on_back_callback = kwargs.get('on_back_callback')
@@ -1328,6 +1615,8 @@ class BubbleViewAnalyseTool(BubbleViewTool):
         super().__init__(win, frame, config)
 
         self.frame.bind('<Configure>', self._frame_configure)
+
+        win.state('zoomed')
 
     def _init_menu_bar_back_frame(self):
         if self._menu_bar_frame is None:
